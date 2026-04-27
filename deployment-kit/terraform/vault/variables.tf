@@ -37,3 +37,15 @@ variable "kv_mount_path" {
   default     = "secret"
 }
 
+variable "allow_demo_secrets" {
+  description = "Разрешить запись демонстрационных секретов. Для stage/prod-like окружений должно быть false."
+  type        = bool
+  default     = false
+}
+
+variable "app_secret_overrides" {
+  description = "Секреты приложений, переданные через защищённые tfvars/CI variables."
+  type        = map(map(string))
+  sensitive   = true
+  default     = {}
+}

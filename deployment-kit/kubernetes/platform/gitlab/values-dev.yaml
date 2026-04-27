@@ -1,0 +1,40 @@
+# dev-профиль уменьшает ресурсы GitLab для демонстрационного стенда.
+global:
+  hosts:
+    domain: lab.local
+
+gitlab:
+  webservice:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        cpu: 300m
+        memory: 1Gi
+  sidekiq:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        cpu: 200m
+        memory: 768Mi
+  toolbox:
+    replicas: 1
+  gitaly:
+    persistence:
+      size: 10Gi
+
+postgresql:
+  primary:
+    persistence:
+      size: 8Gi
+
+redis:
+  master:
+    persistence:
+      size: 2Gi
+
+minio:
+  persistence:
+    size: 5Gi
+

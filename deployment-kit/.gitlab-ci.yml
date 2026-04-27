@@ -4,5 +4,4 @@ workflow:
     - when: always
 
 include:
-  - local: ci/.gitlab/infra.gitlab-ci.yml
-  - local: ci/.gitlab/app.gitlab-ci.yml
+  - local: ci/templates/infra-pipeline.yml

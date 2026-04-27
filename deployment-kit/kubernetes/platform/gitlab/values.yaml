@@ -1,0 +1,97 @@
+# GitLab относится к devops-контуру платформы и разворачивается через официальный Helm chart.
+global:
+  edition: ce
+  hosts:
+    domain: lab.local
+    https: true
+    externalIP: "127.0.0.1"
+    gitlab:
+      name: gitlab.lab.local
+    registry:
+      name: registry.lab.local
+    minio:
+      name: minio.lab.local
+  ingress:
+    enabled: true
+    class: nginx
+    configureCertmanager: false
+    annotations:
+      cert-manager.io/cluster-issuer: test-selfsigned
+    tls:
+      enabled: true
+  initialRootPassword:
+    secret: gitlab-root-password
+    key: password
+  appConfig:
+    defaultProjectsFeatures:
+      builds: true
+      containerRegistry: true
+      issues: true
+      mergeRequests: true
+      wiki: true
+
+# Внешние ingress-nginx и cert-manager уже устанавливаются deployment-kit.
+installCertmanager: false
+certmanager:
+  installCRDs: false
+nginx-ingress:
+  enabled: false
+prometheus:
+  install: false
+
+gitlab-runner:
+  install: true
+  rbac:
+    create: true
+  runners:
+    locked: false
+    config: |
+      [[runners]]
+        [runners.kubernetes]
+          image = "ubuntu:22.04"
+          namespace = "devops"
+  concurrent: 2
+
+registry:
+  enabled: true
+  ingress:
+    tls:
+      secretName: gitlab-registry-tls
+
+gitlab:
+  webservice:
+    ingress:
+      tls:
+        secretName: gitlab-webservice-tls
+  gitaly:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 20Gi
+  gitlab-shell:
+    service:
+      type: ClusterIP
+
+postgresql:
+  install: true
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 10Gi
+
+redis:
+  install: true
+  master:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 5Gi
+
+minio:
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 10Gi
+  ingress:
+    enabled: false

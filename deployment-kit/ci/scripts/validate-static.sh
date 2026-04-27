@@ -14,6 +14,17 @@ for app in api gateway frontend; do
     -f "kubernetes/apps/${app}/values-dev.yaml" >/dev/null
 done
 
+# GitLab chart тяжёлый и скачивается из внешнего repo; если chart доступен, проверяем values.
+GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
+if helm show chart gitlab/gitlab --version "$GITLAB_CHART_VERSION" >/dev/null 2>&1; then
+  helm template gitlab gitlab/gitlab \
+    --version "$GITLAB_CHART_VERSION" \
+    -f kubernetes/platform/gitlab/values.yaml \
+    -f kubernetes/platform/gitlab/values-dev.yaml >/dev/null
+else
+  echo "GitLab chart ${GITLAB_CHART_VERSION} недоступен локально, Helm template GitLab пропущен."
+fi
+
 # Если Ansible установлен на машине проверки, валидируем синтаксис playbook'ов.
 if command -v ansible-playbook >/dev/null 2>&1; then
   export ANSIBLE_CONFIG=ansible/ansible.cfg
@@ -25,6 +36,10 @@ fi
 
 # Terraform validate требует предварительного init, но не требует реальных YC credentials.
 for dir in terraform/vm terraform/platform terraform/vault; do
-  terraform -chdir="$dir" init -backend=false -input=false >/dev/null
+  if [[ ! -d "$dir/.terraform/providers" ]]; then
+    terraform -chdir="$dir" init -backend=false -input=false >/dev/null
+  else
+    echo "Terraform providers уже установлены для $dir, init пропущен."
+  fi
   terraform -chdir="$dir" validate
 done

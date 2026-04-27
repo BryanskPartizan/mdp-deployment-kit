@@ -25,13 +25,16 @@ Terraform-слой `terraform/platform` устанавливает Vault Helm ch
 ## Стадия 4. Развертывание платформенных сервисов
 На этой стадии устанавливаются namespaces, ingress-контроллер, cert-manager, контур наблюдаемости и metrics-server.
 
-## Стадия 5. Развертывание прикладного контура
+## Стадия 5. Развертывание GitLab
+GitLab разворачивается как devops-компонент в namespace `devops`. Chart использует внешний ingress-nginx deployment-kit, cert-manager ClusterIssuer `test-selfsigned` и storage class `local-path`. Root password передаётся через Kubernetes Secret `gitlab-root-password`, создаваемый из защищённой переменной `GITLAB_ROOT_PASSWORD`. GitLab Runner включён в тот же Helm release, чтобы установленный GitLab мог исполнять pipeline jobs.
+
+## Стадия 6. Развертывание прикладного контура
 На прикладной стадии развертываются PostgreSQL, Redis, API, gateway и frontend, после чего применяются манифесты безопасности и резервного копирования.
 
-## Стадия 6. Верификация
+## Стадия 7. Верификация
 Smoke-тесты, нагрузочные проверки и отказовые сценарии подтверждают доступность сервисов, работу масштабирования и реакцию системы на потерю worker-узла.
 
-## Стадия 7. Удаление стенда
+## Стадия 8. Удаление стенда
 Для пересборки Kubernetes на тех же VM используется `make kubeadm-reset ENV=<env>` с явным подтверждением `CONFIRM_RESET=<env>`. Эта операция очищает kubeadm, etcd, kubelet, CNI и локальные bootstrap-артефакты, но не удаляет VM и сетевые ресурсы.
 
 Инфраструктура удаляется через `make infra-destroy ENV=<env>` с явным подтверждением `CONFIRM_DESTROY=<env>`, чтобы исключить случайное уничтожение окружения.

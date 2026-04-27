@@ -34,6 +34,14 @@ make test-security ENV=vm-dev
 make test-integration ENV=vm-dev
 ```
 
+## Проверка GitLab
+Проверяет namespace `devops`, root secret, ingress, PVC, rollout Deployment/StatefulSet и внешние endpoints `gitlab.lab.local`/`registry.lab.local`, если доступны Terraform outputs.
+
+Запуск:
+```bash
+make test-gitlab ENV=vm-dev
+```
+
 ## Проверка хранения данных
 Создаёт временный PVC, записывает данные из одного Pod'а и читает их из другого Pod'а, подтверждая работу default `local-path` storage class.
 

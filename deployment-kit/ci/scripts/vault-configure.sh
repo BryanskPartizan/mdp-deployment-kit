@@ -42,6 +42,7 @@ fi
 export TF_VAR_vault_addr="http://127.0.0.1:8200"
 export TF_VAR_vault_token="$VAULT_TOKEN"
 export TF_VAR_token_reviewer_jwt="$TOKEN_REVIEWER_JWT"
+export TF_VAR_allow_demo_secrets="${ALLOW_INSECURE_DEMO_SECRETS:-false}"
 
 terraform -chdir=terraform/vault init -input=false
 terraform -chdir=terraform/vault apply \
