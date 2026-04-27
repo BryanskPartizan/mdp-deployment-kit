@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Apply post-bootstrap configuration
+  hosts: control_plane[0]
+  become: true
+  roles:
+    - post_bootstrap

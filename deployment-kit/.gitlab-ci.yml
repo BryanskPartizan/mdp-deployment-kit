@@ -1,0 +1,8 @@
+# Файл описывает CI/CD-конвейер для соответствующего контура решения.
+workflow:
+  rules:
+    - when: always
+
+include:
+  - local: ci/.gitlab/infra.gitlab-ci.yml
+  - local: ci/.gitlab/app.gitlab-ci.yml

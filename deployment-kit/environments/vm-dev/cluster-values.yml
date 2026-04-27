@@ -1,0 +1,16 @@
+ingressNginx:
+  service:
+    type: NodePort
+    httpNodePort: 30080
+    httpsNodePort: 30443
+certManager:
+  crds:
+    enabled: true
+vault:
+  server:
+    dev:
+      enabled: true
+prometheusStack:
+  grafana:
+    ingress:
+      enabled: false

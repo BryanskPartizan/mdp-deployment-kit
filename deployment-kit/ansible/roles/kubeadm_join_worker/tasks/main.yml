@@ -1,0 +1,11 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Copy worker join script
+  copy:
+    src: "{{ cluster_artifacts_dir }}/worker-join-command.sh"
+    dest: /root/worker-join-command.sh
+    mode: '0700'
+
+- name: Join node as worker
+  shell: /root/worker-join-command.sh
+  args:
+    creates: /etc/kubernetes/kubelet.conf

@@ -1,0 +1,13 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+# Общие переменные применяются ко всему кластеру.
+ansible_user: ubuntu
+container_runtime: containerd
+kubernetes_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+cluster_artifacts_dir: "{{ playbook_dir }}/../../.artifacts/{{ lookup('env', 'ENV') | default('vm-dev', true) }}"
+cluster_name: demo-k8s
+kubernetes_version: "1.29.3"
+pod_subnet: "10.244.0.0/16"
+service_subnet: "10.96.0.0/12"

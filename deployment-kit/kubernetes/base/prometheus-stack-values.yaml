@@ -1,0 +1,22 @@
+grafana:
+  enabled: true
+  adminPassword: admin12345
+  service:
+    type: ClusterIP
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 8Gi
+kubeStateMetrics:
+  enabled: true
+nodeExporter:
+  enabled: true

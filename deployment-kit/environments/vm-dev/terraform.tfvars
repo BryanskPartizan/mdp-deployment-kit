@@ -1,0 +1,11 @@
+yc_cloud_id      = "REPLACE_WITH_YC_CLOUD_ID"
+yc_folder_id     = "REPLACE_WITH_YC_FOLDER_ID"
+yc_zone          = "ru-central1-a"
+cluster_name     = "demo-k8s-dev"
+vm_prefix        = "demo"
+network_cidr     = "10.10.10.0/24"
+ssh_public_key_path = "/absolute/path/to/id_ed25519.pub"
+node_count_cp    = 3
+node_count_worker = 2
+allowed_ssh_cidrs = ["0.0.0.0/0"]
+allowed_ingress_cidrs = ["0.0.0.0/0"]

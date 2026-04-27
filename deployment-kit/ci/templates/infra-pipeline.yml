@@ -1,0 +1,7 @@
+# Файл описывает CI/CD-конвейер для соответствующего контура решения.
+stages:
+  - validate
+  - plan
+  - apply
+  - bootstrap
+  - platform

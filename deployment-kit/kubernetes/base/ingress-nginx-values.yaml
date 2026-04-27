@@ -1,0 +1,14 @@
+controller:
+  replicaCount: 2
+  service:
+    type: NodePort
+    externalTrafficPolicy: Local
+    nodePorts:
+      http: 30080
+      https: 30443
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  admissionWebhooks:
+    enabled: true

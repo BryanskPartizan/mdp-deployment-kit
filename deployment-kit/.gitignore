@@ -1,0 +1,10 @@
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.retry
+*.log
+.artifacts/
+.kube/
+*.tar.gz
+__pycache__/
+*.pyc

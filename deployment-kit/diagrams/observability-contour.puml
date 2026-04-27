@@ -1,0 +1,4 @@
+@startuml
+title Контур наблюдаемости
+skinparam shadowing false
+@enduml

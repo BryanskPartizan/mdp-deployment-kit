@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gateway
+description: gateway chart for deployment kit demo
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

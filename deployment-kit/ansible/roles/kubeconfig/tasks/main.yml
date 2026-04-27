@@ -1,0 +1,13 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Проверка локального каталога артефактов
+  delegate_to: localhost
+  file:
+    path: "{{ cluster_artifacts_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Fetch admin kubeconfig to local artifacts
+  fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ cluster_artifacts_dir }}/admin.conf"
+    flat: true

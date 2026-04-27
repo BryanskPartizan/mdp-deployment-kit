@@ -1,0 +1,37 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Обновление apt-кеша на узлах семейства Debian
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Установка базовых пакетов
+  package:
+    name:
+      - curl
+      - ca-certificates
+      - apt-transport-https
+      - gnupg
+      - jq
+    state: present
+
+- name: Немедленное отключение swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb | int > 0
+
+- name: Отключение swap в fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^(.*\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+
+- name: Установка hostname из inventory при наличии fqdn
+  hostname:
+    name: "{{ hostvars[inventory_hostname].fqdn | default(inventory_hostname) }}"
+
+- name: Развёртывание конфигурации sysctl
+  template:
+    src: sysctl.conf.j2
+    dest: /etc/sysctl.d/99-kubernetes.conf
+    mode: '0644'
+  notify: reload sysctl

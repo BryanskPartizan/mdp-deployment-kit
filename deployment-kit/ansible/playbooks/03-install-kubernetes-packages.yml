@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Install kubeadm, kubelet and kubectl
+  hosts: kube_cluster
+  become: true
+  roles:
+    - kubernetes_packages

@@ -1,0 +1,4 @@
+cluster_name: demo-k8s-stage
+kubernetes_version: "1.29.3"
+pod_subnet: "10.244.0.0/16"
+service_subnet: "10.96.0.0/12"

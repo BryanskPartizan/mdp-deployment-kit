@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Настройка параметров ядра
+  hosts: kube_cluster
+  become: true
+  roles:
+    - kernel_prereqs

@@ -1,0 +1,17 @@
+@startuml
+title Целевая архитектура
+left to right direction
+actor Пользователь as user
+rectangle "Ingress" as ing
+rectangle "Gateway" as gw
+rectangle "API" as api
+database "PostgreSQL" as pg
+rectangle "Redis" as redis
+cloud "Контур наблюдаемости
+Prometheus/Grafana/Loki" as obs
+user --> ing --> gw --> api
+api --> pg
+api --> redis
+obs --> gw
+obs --> api
+@enduml

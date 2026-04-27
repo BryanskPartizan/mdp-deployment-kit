@@ -1,0 +1,26 @@
+# Шаблон определяет параметры инициализации первого control-plane узла.
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+    node-ip: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+---
+# Шаблон определяет параметры инициализации первого control-plane узла.
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: {{ cluster_name }}
+kubernetesVersion: v{{ kubernetes_version }}
+controlPlaneEndpoint: {{ control_plane_endpoint }}
+networking:
+  podSubnet: {{ pod_subnet }}
+  serviceSubnet: {{ service_subnet }}
+apiServer:
+  certSANs:
+    - "{{ control_plane_endpoint.split(':')[0] }}"
+    - "{{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}"
+controllerManager: {}
+scheduler: {}

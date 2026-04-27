@@ -1,0 +1,6 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+kubernetes_version: "1.29.3"
+pod_subnet: 10.244.0.0/16
+service_subnet: 10.96.0.0/12
+control_plane_endpoint: "{{ control_plane_vip }}:6443"
+kubeadm_upload_certs: true

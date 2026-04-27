@@ -1,0 +1,11 @@
+gateway:
+  host: gateway.lab.local
+api:
+  replicas: 2
+frontend:
+  host: app.lab.local
+postgres:
+  auth:
+    database: appdb
+redis:
+  architecture: standalone

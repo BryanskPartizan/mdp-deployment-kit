@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Установка контейнерного runtime
+  hosts: kube_cluster
+  become: true
+  roles:
+    - container_runtime

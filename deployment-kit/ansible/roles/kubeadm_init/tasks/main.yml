@@ -1,0 +1,43 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Проверка локального каталога артефактов
+  delegate_to: localhost
+  file:
+    path: "{{ cluster_artifacts_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Генерация конфигурации kubeadm init
+  template:
+    src: kubeadm-init-config.yaml.j2
+    dest: /root/kubeadm-init-config.yaml
+    mode: '0600'
+
+- name: Выполнение kubeadm init
+  command: kubeadm init --config=/root/kubeadm-init-config.yaml --upload-certs
+  args:
+    creates: /etc/kubernetes/admin.conf
+  register: kubeadm_init_result
+
+- name: Получение join-команды для worker-узлов
+  shell: kubeadm token create --print-join-command
+  register: worker_join_cmd
+  changed_when: false
+
+- name: Получение certificate-key для подключения control plane
+  shell: kubeadm init phase upload-certs --upload-certs | tail -n 1
+  register: cert_key
+  changed_when: false
+
+- name: Сохранение join-команды worker-узлов локально
+  delegate_to: localhost
+  copy:
+    dest: "{{ cluster_artifacts_dir }}/worker-join-command.sh"
+    content: "{{ worker_join_cmd.stdout }}\n"
+    mode: '0700'
+
+- name: Сохранение join-команды control-plane локально
+  delegate_to: localhost
+  copy:
+    dest: "{{ cluster_artifacts_dir }}/control-plane-join-command.sh"
+    content: "{{ worker_join_cmd.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}\n"
+    mode: '0700'

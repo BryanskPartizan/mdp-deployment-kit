@@ -1,0 +1,4 @@
+@startuml
+title Направление расширения под AWS
+skinparam shadowing false
+@enduml

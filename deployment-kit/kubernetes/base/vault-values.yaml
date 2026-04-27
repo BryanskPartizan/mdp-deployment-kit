@@ -1,0 +1,17 @@
+server:
+  dev:
+    enabled: true
+    devRootToken: root
+  standalone:
+    enabled: false
+  ha:
+    enabled: false
+  ingress:
+    enabled: false
+  service:
+    enabled: true
+    type: ClusterIP
+ui:
+  enabled: true
+injector:
+  enabled: false

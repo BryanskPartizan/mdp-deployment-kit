@@ -1,0 +1,11 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- import_playbook: 01-bootstrap-os.yml
+- import_playbook: 02-install-container-runtime.yml
+- import_playbook: 03-install-kubernetes-packages.yml
+- import_playbook: 04-configure-kernel-prereqs.yml
+- import_playbook: 05-init-first-control-plane.yml
+- import_playbook: 06-join-other-control-planes.yml
+- import_playbook: 07-join-workers.yml
+- import_playbook: 08-install-cni.yml
+- import_playbook: 09-install-kubeconfig-and-tools.yml
+- import_playbook: 10-post-bootstrap.yml

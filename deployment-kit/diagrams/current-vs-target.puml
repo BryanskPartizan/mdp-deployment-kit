@@ -1,0 +1,4 @@
+@startuml
+title Исходное и целевое состояние
+skinparam shadowing false
+@enduml

@@ -1,0 +1,5 @@
+ansible_user: ubuntu
+kubernetes_version: "1.29.3"
+pod_subnet: "10.244.0.0/16"
+service_subnet: "10.96.0.0/12"
+cni_manifest_url: "https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"

@@ -1,0 +1,18 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Проверка каталога kubeconfig для root
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0700'
+
+- name: Копирование admin kubeconfig в домашний каталог root
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: true
+    mode: '0600'
+
+- name: Установка Flannel CNI
+  environment:
+    KUBECONFIG: /root/.kube/config
+  command: kubectl apply -f {{ cni_manifest_url | default('https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml') }}

@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Инициализация первого control-plane узла node
+  hosts: control_plane_primary
+  become: true
+  roles:
+    - kubeadm_init

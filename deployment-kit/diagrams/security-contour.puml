@@ -1,0 +1,4 @@
+@startuml
+title Контур безопасности
+skinparam shadowing false
+@enduml

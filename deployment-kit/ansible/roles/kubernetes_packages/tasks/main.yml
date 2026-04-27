@@ -1,0 +1,48 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Create Kubernetes apt keyring directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Determine Kubernetes package repository version
+  set_fact:
+    kubernetes_repo_version: "{{ 'v' + (kubernetes_version.split('.')[:2] | join('.')) }}"
+
+- name: Добавление APT-репозитория Kubernetes key
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ kubernetes_repo_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes repository
+  copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubernetes_repo_version }}/deb/ /
+    mode: '0644'
+
+- name: Refresh apt cache after adding Kubernetes repository
+  apt:
+    update_cache: true
+
+- name: Установка пакетов Kubernetes
+  apt:
+    name:
+      - kubelet={{ kubernetes_version }}-*
+      - kubeadm={{ kubernetes_version }}-*
+      - kubectl={{ kubernetes_version }}-*
+    state: present
+    allow_downgrade: true
+
+- name: Фиксация версий пакетов Kubernetes
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ kubernetes_packages }}"
+
+- name: Включение сервиса kubelet service
+  service:
+    name: kubelet
+    enabled: true
+    state: started

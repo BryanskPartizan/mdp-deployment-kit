@@ -1,0 +1,4 @@
+@startuml
+title Сценарий отказа при потере узла
+skinparam shadowing false
+@enduml

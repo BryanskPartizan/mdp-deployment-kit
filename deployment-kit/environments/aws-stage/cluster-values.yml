@@ -1,0 +1,13 @@
+ingressNginx:
+  service:
+    type: LoadBalancer
+certManager:
+  installCRDs: true
+vault:
+  server:
+    dev:
+      enabled: true
+prometheusStack:
+  grafana:
+    ingress:
+      enabled: false

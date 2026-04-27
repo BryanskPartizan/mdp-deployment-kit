@@ -1,0 +1,15 @@
+architecture: standalone
+auth:
+  existingSecret: postgres-auth
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+  username: app
+  database: appdb
+primary:
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 8Gi
+commonLabels:
+  app.kubernetes.io/name: postgres

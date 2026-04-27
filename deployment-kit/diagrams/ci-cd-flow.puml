@@ -1,0 +1,15 @@
+@startuml
+title Поток CI/CD
+actor Инженер
+rectangle GitLab
+rectangle "Реестр контейнерных образов" as reg
+rectangle "Инфраструктурный pipeline" as infra
+rectangle "Прикладной pipeline" as app
+rectangle "Kubernetes-кластер" as k8s
+Инженер --> GitLab
+GitLab --> infra
+GitLab --> app
+app --> reg
+infra --> k8s
+app --> k8s
+@enduml

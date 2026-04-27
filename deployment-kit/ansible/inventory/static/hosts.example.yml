@@ -1,0 +1,39 @@
+all:
+  vars:
+    ansible_user: ubuntu
+    cluster_name: demo-platform
+    control_plane_vip: 10.10.10.10
+    control_plane_endpoint: 10.10.10.10:6443
+  children:
+    control_plane:
+      hosts:
+        demo-cp-01:
+          ansible_host: 51.250.10.11
+          node_ip: 10.10.10.10
+        demo-cp-02:
+          ansible_host: 51.250.10.12
+          node_ip: 10.10.10.11
+        demo-cp-03:
+          ansible_host: 51.250.10.13
+          node_ip: 10.10.10.12
+    control_plane_primary:
+      hosts:
+        demo-cp-01:
+          ansible_host: 51.250.10.11
+          node_ip: 10.10.10.10
+    control_plane_secondary:
+      hosts:
+        demo-cp-02:
+          ansible_host: 51.250.10.12
+          node_ip: 10.10.10.11
+        demo-cp-03:
+          ansible_host: 51.250.10.13
+          node_ip: 10.10.10.12
+    workers:
+      hosts:
+        demo-worker-01:
+          ansible_host: 51.250.10.21
+          node_ip: 10.10.10.20
+        demo-worker-02:
+          ansible_host: 51.250.10.22
+          node_ip: 10.10.10.21

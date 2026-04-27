@@ -1,0 +1,11 @@
+gateway:
+  host: gateway.aws-stage.local
+api:
+  replicas: 2
+frontend:
+  host: app.aws-stage.local
+postgres:
+  auth:
+    database: appdb
+redis:
+  architecture: standalone

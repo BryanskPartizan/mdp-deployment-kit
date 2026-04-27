@@ -1,0 +1,6 @@
+# Сценарий описывает отдельную стадию подготовки кластера.
+- name: Join remaining control plane nodes
+  hosts: control_plane_secondary
+  become: true
+  roles:
+    - kubeadm_join_control_plane

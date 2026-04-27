@@ -1,0 +1,35 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Refresh apt cache before installing container runtime
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install containerd package
+  package:
+    name: containerd
+    state: present
+
+- name: Ensure containerd config directory exists
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+
+- name: Генерация конфигурации containerd по умолчанию при отсутствии файла
+  shell: |
+    containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+
+- name: Включение SystemdCgroup в конфигурации containerd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+
+- name: Enable and restart containerd
+  service:
+    name: containerd
+    enabled: true
+    state: restarted

@@ -1,0 +1,8 @@
+config:
+  logLevel: info
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+extraScrapeConfigs: |
+  - job_name: kubernetes-pods
+    pipeline_stages:
+      - cri: {}

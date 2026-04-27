@@ -1,0 +1,11 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Copy control plane join script
+  copy:
+    src: "{{ cluster_artifacts_dir }}/control-plane-join-command.sh"
+    dest: /root/control-plane-join-command.sh
+    mode: '0700'
+
+- name: Join node to control plane
+  shell: /root/control-plane-join-command.sh
+  args:
+    creates: /etc/kubernetes/kubelet.conf

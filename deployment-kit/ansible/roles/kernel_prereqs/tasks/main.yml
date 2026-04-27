@@ -1,0 +1,21 @@
+# Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Load required kernel modules
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: Загрузка модуля overlay
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Загрузка модуля br_netfilter
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Применение параметров sysctl
+  command: sysctl --system
