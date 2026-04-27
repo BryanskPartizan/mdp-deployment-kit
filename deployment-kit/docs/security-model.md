@@ -6,8 +6,14 @@
 - разделение пространств имён;
 - Role-Based Access Control;
 - политика default deny и выборочные сетевые правила;
-- Vault как центральный компонент управления секретами на архитектурном уровне;
+- Vault как центральный компонент управления секретами с Terraform-описанием auth methods, policies и KV v2;
+- Vault Agent Injector для доставки секретов в Pod'ы по Kubernetes ServiceAccount;
+- отдельные ServiceAccount для API, gateway и frontend;
+- ограничение внешнего доступа через security group и Yandex Network Load Balancer;
 - интеграция секрета реестра для загрузки приватных образов.
 
 ## Отложенные меры
 Полноценная интеграция с внешним identity provider, например Keycloak, рассматривается только как направление развития и не входит в завершённый объём реализации.
+
+## Особенности Vault
+Первичный `init/unseal` остаётся операционной процедурой, потому что Vault до инициализации не может принять Terraform-конфигурацию через собственный API. После этого Terraform-слой `terraform/vault` настраивает Kubernetes auth, политики и демонстрационные секреты, а bootstrap-материалы сохраняются в `.artifacts/<env>/vault-init.json` с правами `0600`.

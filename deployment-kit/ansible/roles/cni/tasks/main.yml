@@ -15,4 +15,14 @@
 - name: Установка Flannel CNI
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl apply -f {{ cni_manifest_url | default('https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml') }}
+  command: kubectl apply -f {{ cni_manifest_url | default('https://github.com/flannel-io/flannel/releases/download/v0.27.4/kube-flannel.yml') }}
+  register: cni_apply
+  retries: 5
+  delay: 15
+  until: cni_apply.rc == 0
+
+- name: Ожидание rollout Flannel DaemonSet
+  environment:
+    KUBECONFIG: /root/.kube/config
+  command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=300s
+  changed_when: false

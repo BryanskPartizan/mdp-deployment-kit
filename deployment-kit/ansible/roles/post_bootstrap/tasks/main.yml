@@ -9,4 +9,41 @@
 - name: Wait for nodes to become Ready
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  command: kubectl wait --for=condition=Ready node --all --timeout=300s
+  command: kubectl wait --for=condition=Ready nodes --all --timeout=300s
+  changed_when: false
+
+- name: Ожидание готовности CoreDNS
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  command: kubectl -n kube-system rollout status deployment/coredns --timeout=300s
+  changed_when: false
+
+- name: Ожидание готовности kube-proxy
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  command: kubectl -n kube-system rollout status daemonset/kube-proxy --timeout=300s
+  changed_when: false
+
+- name: Получение имени etcd Pod для health-check
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  command: kubectl -n kube-system get pods -l component=etcd -o jsonpath='{.items[0].metadata.name}'
+  register: etcd_probe_pod
+  changed_when: false
+
+- name: Проверка quorum etcd через endpoint health
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  command: >
+    kubectl -n kube-system exec {{ etcd_probe_pod.stdout }} --
+    sh -ec 'ETCDCTL_API=3 etcdctl
+    --endpoints={{ groups["control_plane"] | map("extract", hostvars, "node_ip") | map("regex_replace", "^(.*)$", "https://\\1:2379") | join(",") }}
+    --cacert=/etc/kubernetes/pki/etcd/ca.crt
+    --cert=/etc/kubernetes/pki/etcd/server.crt
+    --key=/etc/kubernetes/pki/etcd/server.key
+    endpoint health'
+  register: etcd_health
+  retries: 5
+  delay: 10
+  until: etcd_health.rc == 0
+  changed_when: false

@@ -11,3 +11,18 @@
     src: /etc/kubernetes/admin.conf
     dest: "{{ cluster_artifacts_dir }}/admin.conf"
     flat: true
+
+- name: Фиксация HA endpoint в локальном kubeconfig
+  delegate_to: localhost
+  become: false
+  replace:
+    path: "{{ cluster_artifacts_dir }}/admin.conf"
+    regexp: 'server: https://[^:]+:6443'
+    replace: "server: https://{{ control_plane_endpoint }}"
+
+- name: Ограничение прав на локальный kubeconfig
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ cluster_artifacts_dir }}/admin.conf"
+    mode: '0600'

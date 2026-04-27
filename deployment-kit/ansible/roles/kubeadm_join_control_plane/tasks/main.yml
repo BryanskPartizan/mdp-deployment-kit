@@ -1,11 +1,39 @@
 # Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Проверка текущего kubeadm-состояния control-plane узла
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Ожидание доступности HA endpoint Kubernetes API перед join
+  wait_for:
+    host: "{{ control_plane_endpoint.split(':')[0] }}"
+    port: "{{ control_plane_endpoint.split(':')[1] | int }}"
+    timeout: 300
+    delay: 5
+  when: not kubelet_conf.stat.exists
+
 - name: Copy control plane join script
   copy:
     src: "{{ cluster_artifacts_dir }}/control-plane-join-command.sh"
     dest: /root/control-plane-join-command.sh
     mode: '0700'
+  when: not kubelet_conf.stat.exists
 
 - name: Join node to control plane
   shell: /root/control-plane-join-command.sh
   args:
     creates: /etc/kubernetes/kubelet.conf
+  register: control_plane_join_result
+  retries: 3
+  delay: 15
+  until: control_plane_join_result.rc == 0
+
+- name: Ожидание запуска kubelet после join control-plane
+  service_facts:
+
+- name: Проверка kubelet после join control-plane
+  assert:
+    that:
+      - ansible_facts.services['kubelet.service'] is defined
+      - ansible_facts.services['kubelet.service'].state == 'running'
+    fail_msg: "kubelet.service не запущен после подключения control-plane узла."

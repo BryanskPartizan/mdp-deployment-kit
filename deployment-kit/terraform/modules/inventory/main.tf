@@ -1,14 +1,14 @@
 # Inventory формируется на основе Terraform outputs и используется следующей стадией автоматизации.
 locals {
-  primary_control_plane = var.control_planes[0]
+  primary_control_plane    = var.control_planes[0]
   secondary_control_planes = length(var.control_planes) > 1 ? slice(var.control_planes, 1, length(var.control_planes)) : []
 
   inventory = {
     all = {
       vars = {
-        ansible_user          = var.ssh_user
-        cluster_name          = var.cluster_name
-        control_plane_vip     = var.control_plane_vip
+        ansible_user           = var.ssh_user
+        cluster_name           = var.cluster_name
+        control_plane_vip      = var.control_plane_vip
         control_plane_endpoint = "${var.control_plane_vip}:6443"
       }
       children = {

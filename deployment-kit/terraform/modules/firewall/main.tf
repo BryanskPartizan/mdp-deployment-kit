@@ -11,24 +11,30 @@ resource "yandex_vpc_security_group" "this" {
   }
 
   ingress {
-    description    = "Доступ к Kubernetes API"
+    description    = "Доступ к Kubernetes API через внешний HA endpoint"
     protocol       = "TCP"
     port           = 6443
-    v4_cidr_blocks = var.allowed_ssh_cidrs
+    v4_cidr_blocks = var.allowed_api_cidrs
   }
 
   ingress {
-    description    = "Входящий HTTP-трафик"
+    description    = "HTTP-трафик от внешнего NLB к NodePort ingress-nginx"
     protocol       = "TCP"
-    port           = 80
+    port           = var.ingress_http_node_port
     v4_cidr_blocks = var.allowed_ingress_cidrs
   }
 
   ingress {
-    description    = "Входящий HTTPS-трафик"
+    description    = "HTTPS-трафик от внешнего NLB к NodePort ingress-nginx"
     protocol       = "TCP"
-    port           = 443
+    port           = var.ingress_https_node_port
     v4_cidr_blocks = var.allowed_ingress_cidrs
+  }
+
+  ingress {
+    description       = "Проверки доступности от Yandex Network Load Balancer"
+    protocol          = "TCP"
+    predefined_target = "loadbalancer_healthchecks"
   }
 
   ingress {

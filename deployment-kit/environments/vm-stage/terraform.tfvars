@@ -8,4 +8,7 @@ ssh_public_key_path = "/absolute/path/to/id_ed25519.pub"
 node_count_cp    = 3
 node_count_worker = 2
 allowed_ssh_cidrs = ["0.0.0.0/0"]
+allowed_api_cidrs = ["0.0.0.0/0"]
 allowed_ingress_cidrs = ["0.0.0.0/0"]
+ingress_http_node_port = 30080
+ingress_https_node_port = 30443

@@ -6,6 +6,9 @@ image:
 service:
   type: ClusterIP
   port: 8080
+serviceAccount:
+  create: true
+  name: frontend
 resources:
   requests:
     cpu: 100m
@@ -26,4 +29,6 @@ ingress:
 config:
   ENVIRONMENT: dev
 vault:
-  enabled: false
+  enabled: true
+  role: frontend
+  secretPath: secret/data/app/frontend

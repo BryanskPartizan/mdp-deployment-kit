@@ -24,8 +24,28 @@ output "workers" {
 }
 
 output "control_plane_vip" {
-  description = "Адрес endpoint, используемый как kubeadm controlPlaneEndpoint."
-  value       = module.compute.control_plane_vip
+  description = "Адрес HA endpoint, используемый как kubeadm controlPlaneEndpoint."
+  value       = local.control_plane_endpoint_ip
+}
+
+output "api_external_ip" {
+  description = "Внешний IP сетевого балансировщика Kubernetes API."
+  value       = module.load_balancer.api_external_ip
+}
+
+output "ingress_external_ip" {
+  description = "Внешний IP сетевого балансировщика ingress."
+  value       = module.load_balancer.ingress_external_ip
+}
+
+output "api_load_balancer_id" {
+  description = "Идентификатор сетевого балансировщика Kubernetes API."
+  value       = module.load_balancer.api_load_balancer_id
+}
+
+output "ingress_load_balancer_id" {
+  description = "Идентификатор сетевого балансировщика ingress."
+  value       = module.load_balancer.ingress_load_balancer_id
 }
 
 output "inventory_yaml" {

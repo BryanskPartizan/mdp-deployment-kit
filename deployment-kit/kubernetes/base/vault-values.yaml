@@ -1,17 +1,60 @@
+# Vault запускается в HA-режиме с интегрированным Raft-хранилищем.
 server:
   dev:
-    enabled: true
-    devRootToken: root
+    enabled: false
   standalone:
     enabled: false
   ha:
-    enabled: false
-  ingress:
-    enabled: false
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+
+          retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+          }
+
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }
+
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }
+        }
+
+        service_registration "kubernetes" {}
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: local-path
+  auditStorage:
+    enabled: true
+    size: 5Gi
+    storageClass: local-path
   service:
     enabled: true
     type: ClusterIP
+  ingress:
+    enabled: false
+
 ui:
   enabled: true
+  serviceType: ClusterIP
+
 injector:
-  enabled: false
+  enabled: true
+  replicas: 2
+

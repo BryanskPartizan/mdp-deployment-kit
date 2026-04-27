@@ -1,7 +1,113 @@
-# Файл описывает CI/CD-конвейер для соответствующего контура решения.
+# Файл описывает CI/CD-конвейер инфраструктурного контура deployment-kit.
 stages:
   - validate
   - plan
   - apply
   - bootstrap
+  - vault
   - platform
+  - smoke
+  - network
+  - security
+  - integration
+  - resilience
+
+variables:
+  ENV: "vm-dev"
+
+default:
+  before_script:
+    # Все действия CI идут через те же Makefile targets, что и локальный запуск.
+    - chmod +x ci/scripts/*.sh
+    - find tests -name '*.sh' -exec chmod +x {} +
+
+validate:
+  stage: validate
+  script:
+    - make validate ENV="${ENV}"
+
+plan:
+  stage: plan
+  script:
+    - make infra-plan ENV="${ENV}"
+  artifacts:
+    when: always
+    paths:
+      - .artifacts/${ENV}/tfplan
+    expire_in: 1 week
+
+apply:
+  stage: apply
+  when: manual
+  script:
+    - make infra-apply ENV="${ENV}"
+  artifacts:
+    when: always
+    paths:
+      - .artifacts/${ENV}/terraform-outputs.json
+      - ansible/inventory/generated/hosts.yml
+    expire_in: 1 week
+
+kubeadm_bootstrap:
+  stage: bootstrap
+  when: manual
+  script:
+    - make kubeadm-bootstrap ENV="${ENV}"
+  artifacts:
+    when: always
+    paths:
+      - .artifacts/${ENV}/admin.conf
+      - .artifacts/${ENV}/*join-command.sh
+    expire_in: 1 week
+
+deploy_vault:
+  stage: vault
+  when: manual
+  script:
+    - make deploy-vault ENV="${ENV}"
+    - make vault-init ENV="${ENV}"
+    - make vault-configure ENV="${ENV}"
+
+deploy_platform:
+  stage: platform
+  when: manual
+  script:
+    - make deploy-platform ENV="${ENV}"
+
+smoke:
+  stage: smoke
+  script:
+    - make test-smoke ENV="${ENV}"
+
+network:
+  stage: network
+  script:
+    - make test-network ENV="${ENV}"
+
+security:
+  stage: security
+  script:
+    - make test-security ENV="${ENV}"
+
+integration:
+  stage: integration
+  script:
+    - make test-integration ENV="${ENV}"
+    - make test-storage ENV="${ENV}"
+
+resilience:
+  stage: resilience
+  script:
+    - make test-resilience ENV="${ENV}"
+
+worker_drain:
+  stage: resilience
+  when: manual
+  script:
+    - make test-fail-node ENV="${ENV}"
+
+kubeadm_reset:
+  stage: resilience
+  when: manual
+  script:
+    - CONFIRM_RESET="${ENV}" make kubeadm-reset ENV="${ENV}"

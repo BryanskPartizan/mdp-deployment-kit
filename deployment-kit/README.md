@@ -38,7 +38,7 @@
 
 ## Верхнеуровневый поток развертывания
 ```text
-Terraform -> generated inventory -> Ansible kubeadm bootstrap -> platform services -> application charts -> tests
+Terraform -> generated inventory -> Ansible kubeadm bootstrap -> Vault -> platform services -> application charts -> tests
 ```
 
 ## Быстрый запуск
@@ -46,18 +46,28 @@ Terraform -> generated inventory -> Ansible kubeadm bootstrap -> platform servic
 make infra-plan ENV=vm-dev
 make infra-apply ENV=vm-dev
 make kubeadm-bootstrap ENV=vm-dev
+make deploy-vault ENV=vm-dev
+make vault-init ENV=vm-dev
+make vault-configure ENV=vm-dev
 make deploy-platform ENV=vm-dev
 make deploy-apps ENV=vm-dev
 make test-smoke ENV=vm-dev
+make test-network ENV=vm-dev
+make test-security ENV=vm-dev
+make test-integration ENV=vm-dev
 ```
 
 ## Примечания по Yandex Cloud
 - Заполните `yc_cloud_id`, `yc_folder_id` и `ssh_public_key_path` в файлах `environments/*/terraform.tfvars`.
 - Перед запуском Terraform экспортируйте `TF_VAR_yc_token` либо передайте `yc_token` через tfvars/CI-переменные.
-- Ingress-контроллер публикуется через NodePort `30080/30443`. В варианте self-hosted на виртуальных машинах запросы должны направляться на внешний IP worker-узла либо на внешний балансировщик перед пулом worker-узлов.
+- Kubernetes API публикуется через Yandex Network Load Balancer на порту `6443`; этот адрес используется как kubeadm `controlPlaneEndpoint`.
+- Ingress-контроллер публикуется через NodePort `30080/30443`, а внешний HTTP/HTTPS-трафик приходит через отдельный Yandex Network Load Balancer `80/443 -> 30080/30443`.
 - Класс хранения по умолчанию — `local-path`, что позволяет динамически создавать PVC для PostgreSQL, Redis, Prometheus и Loki на локальном хранилище узлов.
+- Vault устанавливается Terraform-слоем `terraform/platform`, а auth methods, policies и demo-секреты описаны в `terraform/vault`.
 
 ## Дополнительные замечания
 - Структура репозитория подготовлена так, чтобы её можно было непосредственно описывать в практической главе ВКР.
 - Каталог AWS отражает направление дальнейшего расширения. Основная полноценно реализованная цель репозитория — self-hosted кластер на VM-инфраструктуре Yandex Cloud.
 - Join-токены и certificate-key формируются в процессе bootstrap и сохраняются локально в каталоге `.artifacts/` для следующих стадий развертывания.
+- Для пересборки Kubernetes на существующих VM используйте явное подтверждение: `CONFIRM_RESET=vm-dev make kubeadm-reset ENV=vm-dev`.
+- Для удаления инфраструктуры используйте явное подтверждение: `CONFIRM_DESTROY=vm-dev make infra-destroy ENV=vm-dev`.

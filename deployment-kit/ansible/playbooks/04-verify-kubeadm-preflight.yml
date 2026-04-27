@@ -1,0 +1,7 @@
+# Сценарий проверяет готовность узлов к kubeadm bootstrap после подготовки ОС и пакетов.
+- name: Проверка готовности узлов к kubeadm bootstrap
+  hosts: kube_cluster
+  become: true
+  roles:
+    - kubeadm_preflight
+

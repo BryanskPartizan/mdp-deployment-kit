@@ -1,0 +1,85 @@
+# Файл относится к аварийному и плановому сбросу kubeadm-состояния узлов.
+- name: Проверка явного подтверждения reset
+  assert:
+    that:
+      - lookup('env', 'CONFIRM_RESET') == (lookup('env', 'ENV') | default('vm-dev', true))
+    fail_msg: "Для reset требуется явное подтверждение: CONFIRM_RESET={{ lookup('env', 'ENV') | default('vm-dev', true) }} make kubeadm-reset ENV={{ lookup('env', 'ENV') | default('vm-dev', true) }}"
+  run_once: true
+
+- name: Остановка kubelet перед reset
+  service:
+    name: kubelet
+    state: stopped
+  failed_when: false
+
+- name: Выполнение kubeadm reset
+  command: kubeadm reset -f
+  register: kubeadm_reset_result
+  changed_when: "'No kubeadm config' not in (kubeadm_reset_result.stdout + kubeadm_reset_result.stderr)"
+  failed_when: false
+
+- name: Очистка Kubernetes и CNI каталогов
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/kubernetes
+    - /var/lib/etcd
+    - /var/lib/kubelet
+    - /etc/cni/net.d
+    - /var/lib/cni
+    - /run/flannel
+    - /var/run/flannel
+
+- name: Удаление CNI интерфейсов
+  command: ip link delete {{ item }}
+  loop:
+    - cni0
+    - flannel.1
+  register: cni_link_delete
+  changed_when: cni_link_delete.rc == 0
+  failed_when: false
+
+- name: Очистка iptables filter-таблицы
+  command: iptables -F
+  failed_when: false
+
+- name: Очистка iptables nat-таблицы
+  command: iptables -t nat -F
+  failed_when: false
+
+- name: Очистка iptables mangle-таблицы
+  command: iptables -t mangle -F
+  failed_when: false
+
+- name: Очистка пользовательских iptables chains
+  command: iptables -X
+  failed_when: false
+
+- name: Очистка IPVS-таблиц при наличии ipvsadm
+  shell: |
+    if command -v ipvsadm >/dev/null 2>&1; then
+      ipvsadm --clear
+    fi
+  changed_when: false
+
+- name: Перезапуск containerd после очистки
+  service:
+    name: containerd
+    state: restarted
+  failed_when: false
+
+- name: Удаление локальных bootstrap-артефактов
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ cluster_artifacts_dir }}/admin.conf"
+    - "{{ cluster_artifacts_dir }}/worker-join-command.sh"
+    - "{{ cluster_artifacts_dir }}/control-plane-join-command.sh"
+    - "{{ cluster_artifacts_dir }}/vault-init.json"
+    - "{{ cluster_artifacts_dir }}/vault-kubernetes-ca.crt"
+  run_once: true
+

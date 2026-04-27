@@ -8,16 +8,37 @@ Deployment kit использует `kubeadm` как базовый механи
 ## Целевая топология
 - 3 управляющих узла
 - 2 worker-узла
+- Yandex Network Load Balancer перед Kubernetes API
+- Yandex Network Load Balancer перед ingress-nginx NodePort
 
 ## Последовательность bootstrap
 1. Подготовка узлов и установка контейнерного runtime.
 2. Установка `kubeadm`, `kubelet` и `kubectl`.
-3. Инициализация первого control-plane узла на основе сгенерированной kubeadm-конфигурации.
-4. Формирование join-команд и certificate-key.
-5. Подключение остальных control-plane узлов.
-6. Подключение worker-узлов.
-7. Установка CNI и сопутствующих инструментов.
-8. Экспорт kubeconfig для следующих стадий развертывания.
+3. Проверка preflight-условий: inventory, swap, sysctl, containerd, Kubernetes packages и свободные control-plane порты.
+4. Инициализация первого control-plane узла на основе сгенерированной kubeadm-конфигурации.
+5. Проверка доступности локального API и HA endpoint через Yandex Network Load Balancer.
+6. Формирование join-команд и certificate-key.
+7. Подключение остальных control-plane узлов.
+8. Подключение worker-узлов.
+9. Установка закреплённой версии Flannel CNI и ожидание rollout DaemonSet.
+10. Экспорт kubeconfig для следующих стадий развертывания.
+11. Post-bootstrap проверки: Ready nodes, CoreDNS, kube-proxy и etcd endpoint health.
+
+## HA endpoint control plane
+`controlPlaneEndpoint` в kubeadm-конфигурации указывает не на отдельный control-plane узел, а на внешний IP сетевого балансировщика Kubernetes API. Это позволяет сохранить доступность API при потере одного управляющего узла и корректно подключать новые control-plane/worker узлы через стабильный адрес.
+
+## Reset без удаления инфраструктуры
+Playbook `ansible/playbooks/reset-kubeadm.yml` очищает Kubernetes-состояние на существующих VM:
+- выполняет `kubeadm reset -f`;
+- удаляет `/etc/kubernetes`, `/var/lib/etcd`, `/var/lib/kubelet`, CNI state и Flannel state;
+- удаляет интерфейсы `cni0` и `flannel.1`;
+- очищает iptables/IPVS;
+- удаляет локальные bootstrap-артефакты окружения.
+
+Запуск требует явного подтверждения:
+```bash
+CONFIRM_RESET=vm-dev make kubeadm-reset ENV=vm-dev
+```
 
 ## Почему в данном проекте выбран kubeadm
 `kubeadm` обеспечивает разумный компромисс между полностью ручной сборкой кластера и сильно opinionated-дистрибутивами. Он явно раскрывает логику инициализации control plane, что особенно важно для решения, которое должно быть воспроизводимо и подробно описано в магистерской работе.

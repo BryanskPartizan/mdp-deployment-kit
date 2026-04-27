@@ -37,3 +37,7 @@ all:
         demo-worker-02:
           ansible_host: 51.250.10.22
           node_ip: 10.10.10.21
+    kube_cluster:
+      children:
+        control_plane: {}
+        workers: {}

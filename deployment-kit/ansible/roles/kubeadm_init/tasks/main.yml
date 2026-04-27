@@ -18,6 +18,23 @@
     creates: /etc/kubernetes/admin.conf
   register: kubeadm_init_result
 
+- name: Ожидание готовности локального Kubernetes API
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  command: kubectl get --raw=/readyz
+  register: local_apiserver_ready
+  retries: 30
+  delay: 5
+  until: local_apiserver_ready.rc == 0
+  changed_when: false
+
+- name: Ожидание доступности HA endpoint Kubernetes API
+  wait_for:
+    host: "{{ control_plane_endpoint.split(':')[0] }}"
+    port: "{{ control_plane_endpoint.split(':')[1] | int }}"
+    timeout: 300
+    delay: 5
+
 - name: Получение join-команды для worker-узлов
   shell: kubeadm token create --print-join-command
   register: worker_join_cmd

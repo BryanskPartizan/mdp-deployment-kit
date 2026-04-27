@@ -1,0 +1,115 @@
+# Файл относится к проверкам готовности self-hosted kubeadm-кластера.
+- name: Проверка обязательных переменных kubeadm
+  assert:
+    that:
+      - cluster_name is defined
+      - kubernetes_version is defined
+      - pod_subnet is defined
+      - service_subnet is defined
+      - control_plane_endpoint is defined
+      - cluster_artifacts_dir is defined
+    fail_msg: "Не заданы обязательные переменные kubeadm bootstrap."
+
+- name: Проверка HA-топологии inventory
+  assert:
+    that:
+      - groups['control_plane'] | default([]) | length >= (kubeadm_min_control_plane_nodes | default(3))
+      - groups['workers'] | default([]) | length >= (kubeadm_min_worker_nodes | default(1))
+      - groups['control_plane_primary'] | default([]) | length == 1
+    fail_msg: "Для HA bootstrap ожидается один primary control-plane, минимум 3 control-plane и минимум 1 worker."
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+- name: Проверка наличия node_ip для всех узлов
+  assert:
+    that:
+      - hostvars[item].node_ip is defined
+      - hostvars[item].ansible_host is defined
+    fail_msg: "Для узла {{ item }} должны быть заданы node_ip и ansible_host."
+  loop: "{{ groups['kube_cluster'] | default([]) }}"
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+- name: Проверка уникальности node_ip
+  assert:
+    that:
+      - node_ips | length == (node_ips | unique | length)
+    fail_msg: "В inventory обнаружены повторяющиеся node_ip."
+  vars:
+    node_ips: "{{ groups['kube_cluster'] | map('extract', hostvars, 'node_ip') | list }}"
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+- name: Проверка семейства ОС
+  assert:
+    that:
+      - ansible_os_family == "Debian"
+    fail_msg: "Текущие роли рассчитаны на Debian/Ubuntu узлы."
+
+- name: Проверка отключенного swap
+  command: swapon --show --noheadings
+  register: active_swap
+  changed_when: false
+  failed_when: active_swap.stdout | length > 0
+
+- name: Проверка модуля br_netfilter
+  command: lsmod
+  register: loaded_modules
+  changed_when: false
+  failed_when: "'br_netfilter' not in loaded_modules.stdout"
+
+- name: Проверка sysctl для маршрутизации Pod-трафика
+  command: sysctl -n {{ item.name }}
+  loop:
+    - { name: "net.bridge.bridge-nf-call-iptables", expected: "1" }
+    - { name: "net.ipv4.ip_forward", expected: "1" }
+  register: sysctl_values
+  changed_when: false
+  failed_when: sysctl_values.stdout != item.expected
+
+- name: Сбор статуса systemd-сервисов
+  service_facts:
+
+- name: Проверка containerd
+  assert:
+    that:
+      - ansible_facts.services['containerd.service'] is defined
+      - ansible_facts.services['containerd.service'].state == 'running'
+    fail_msg: "containerd должен быть установлен и запущен до kubeadm init/join."
+
+- name: Проверка установленного kubeadm
+  command: kubeadm version -o short
+  changed_when: false
+
+- name: Проверка установленного kubectl
+  command: kubectl version --client=true
+  changed_when: false
+
+- name: Проверка версии kubelet
+  command: kubelet --version
+  changed_when: false
+
+- name: Проверка существующего kubeadm-состояния узла
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Проверка занятых control-plane портов перед первым bootstrap
+  shell: |
+    ss -H -lnt | awk '{print $4}' | grep -E ':(6443|2379|2380|10257|10259)$' || true
+  register: occupied_control_plane_ports
+  changed_when: false
+  failed_when:
+    - inventory_hostname in groups['control_plane']
+    - not kubelet_conf.stat.exists
+    - occupied_control_plane_ports.stdout | length > 0
+
+- name: Проверка совместимости Flannel manifest и podSubnet
+  assert:
+    that:
+      - pod_subnet == "10.244.0.0/16"
+    fail_msg: "Стандартный manifest Flannel ожидает pod_subnet 10.244.0.0/16. Для другого CIDR нужен отдельный manifest или Helm values."
+  when: "'flannel' in (cni_manifest_url | default(''))"

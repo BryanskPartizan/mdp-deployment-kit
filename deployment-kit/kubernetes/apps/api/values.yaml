@@ -6,6 +6,9 @@ image:
 service:
   type: ClusterIP
   port: 8081
+serviceAccount:
+  create: true
+  name: api
 resources:
   requests:
     cpu: 100m
@@ -27,3 +30,5 @@ config:
   ENVIRONMENT: dev
 vault:
   enabled: true
+  role: api
+  secretPath: secret/data/app/api

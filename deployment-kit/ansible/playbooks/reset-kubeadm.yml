@@ -1,0 +1,7 @@
+# Сценарий очищает Kubernetes-состояние на существующих VM без удаления облачной инфраструктуры.
+- name: Reset kubeadm cluster state
+  hosts: kube_cluster
+  become: true
+  roles:
+    - reset_kubeadm
+

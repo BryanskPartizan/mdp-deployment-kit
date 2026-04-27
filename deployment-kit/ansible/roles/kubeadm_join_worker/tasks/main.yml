@@ -1,11 +1,39 @@
 # Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
+- name: Проверка текущего kubeadm-состояния worker-узла
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Ожидание доступности HA endpoint Kubernetes API перед join
+  wait_for:
+    host: "{{ control_plane_endpoint.split(':')[0] }}"
+    port: "{{ control_plane_endpoint.split(':')[1] | int }}"
+    timeout: 300
+    delay: 5
+  when: not kubelet_conf.stat.exists
+
 - name: Copy worker join script
   copy:
     src: "{{ cluster_artifacts_dir }}/worker-join-command.sh"
     dest: /root/worker-join-command.sh
     mode: '0700'
+  when: not kubelet_conf.stat.exists
 
 - name: Join node as worker
   shell: /root/worker-join-command.sh
   args:
     creates: /etc/kubernetes/kubelet.conf
+  register: worker_join_result
+  retries: 3
+  delay: 15
+  until: worker_join_result.rc == 0
+
+- name: Сбор статуса systemd-сервисов после join worker
+  service_facts:
+
+- name: Проверка kubelet после join worker
+  assert:
+    that:
+      - ansible_facts.services['kubelet.service'] is defined
+      - ansible_facts.services['kubelet.service'].state == 'running'
+    fail_msg: "kubelet.service не запущен после подключения worker-узла."

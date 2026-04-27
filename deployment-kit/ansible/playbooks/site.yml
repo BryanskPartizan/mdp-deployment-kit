@@ -3,6 +3,7 @@
 - import_playbook: 02-install-container-runtime.yml
 - import_playbook: 03-install-kubernetes-packages.yml
 - import_playbook: 04-configure-kernel-prereqs.yml
+- import_playbook: 04-verify-kubeadm-preflight.yml
 - import_playbook: 05-init-first-control-plane.yml
 - import_playbook: 06-join-other-control-planes.yml
 - import_playbook: 07-join-workers.yml

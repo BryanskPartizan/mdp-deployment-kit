@@ -21,6 +21,12 @@ variable "yc_zone" {
   default     = "ru-central1-a"
 }
 
+variable "yc_region" {
+  description = "Регион Yandex Cloud для региональных ресурсов, например target group сетевого балансировщика."
+  type        = string
+  default     = "ru-central1"
+}
+
 variable "cluster_name" {
   description = "Логическое имя кластера."
   type        = string
@@ -145,7 +151,13 @@ variable "enable_nat" {
 }
 
 variable "allowed_ssh_cidrs" {
-  description = "CIDR-диапазоны, которым разрешён доступ по SSH и к Kubernetes API."
+  description = "CIDR-диапазоны, которым разрешён доступ по SSH."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "allowed_api_cidrs" {
+  description = "CIDR-диапазоны, которым разрешён внешний доступ к HA endpoint Kubernetes API."
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
@@ -157,9 +169,21 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "control_plane_endpoint_ip" {
-  description = "Необязательный статический IP-адрес или адрес балансировщика, используемый как kubeadm controlPlaneEndpoint. Если значение не задано, используется приватный IP первого control-plane узла."
+  description = "Аварийное переопределение IP-адреса kubeadm controlPlaneEndpoint. По умолчанию используется IP сетевого балансировщика Kubernetes API."
   type        = string
   default     = null
+}
+
+variable "ingress_http_node_port" {
+  description = "NodePort ingress-nginx для HTTP-трафика."
+  type        = number
+  default     = 30080
+}
+
+variable "ingress_https_node_port" {
+  description = "NodePort ingress-nginx для HTTPS-трафика."
+  type        = number
+  default     = 30443
 }
 
 variable "preemptible" {
