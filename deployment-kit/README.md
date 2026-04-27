@@ -50,11 +50,13 @@ make deploy-vault ENV=vm-dev
 make vault-init ENV=vm-dev
 make vault-configure ENV=vm-dev
 make deploy-platform ENV=vm-dev
+make deploy-gitlab ENV=vm-dev
 make deploy-apps ENV=vm-dev
 make test-smoke ENV=vm-dev
 make test-network ENV=vm-dev
 make test-security ENV=vm-dev
 make test-integration ENV=vm-dev
+make test-gitlab ENV=vm-dev
 ```
 
 ## Примечания по Yandex Cloud
@@ -64,10 +66,13 @@ make test-integration ENV=vm-dev
 - Ingress-контроллер публикуется через NodePort `30080/30443`, а внешний HTTP/HTTPS-трафик приходит через отдельный Yandex Network Load Balancer `80/443 -> 30080/30443`.
 - Класс хранения по умолчанию — `local-path`, что позволяет динамически создавать PVC для PostgreSQL, Redis, Prometheus и Loki на локальном хранилище узлов.
 - Vault устанавливается Terraform-слоем `terraform/platform`, а auth methods, policies и demo-секреты описаны в `terraform/vault`.
+- GitLab разворачивается как devops-компонент платформы через официальный chart `gitlab/gitlab` и публикуется через тот же ingress NLB на `gitlab.lab.local` и `registry.lab.local`.
+- Секреты передаются через переменные окружения/CI variables. Для локального стенда используйте `.env.example` как шаблон, но не коммитьте `.env`.
 
 ## Дополнительные замечания
 - Структура репозитория подготовлена так, чтобы её можно было непосредственно описывать в практической главе ВКР.
 - Каталог AWS отражает направление дальнейшего расширения. Основная полноценно реализованная цель репозитория — self-hosted кластер на VM-инфраструктуре Yandex Cloud.
 - Join-токены и certificate-key формируются в процессе bootstrap и сохраняются локально в каталоге `.artifacts/` для следующих стадий развертывания.
+- Зафиксированные версии Terraform providers и Helm charts перечислены в `docs/versions.md`.
 - Для пересборки Kubernetes на существующих VM используйте явное подтверждение: `CONFIRM_RESET=vm-dev make kubeadm-reset ENV=vm-dev`.
 - Для удаления инфраструктуры используйте явное подтверждение: `CONFIRM_DESTROY=vm-dev make infra-destroy ENV=vm-dev`.

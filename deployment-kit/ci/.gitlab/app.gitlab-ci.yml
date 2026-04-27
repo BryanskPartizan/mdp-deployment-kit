@@ -1,34 +1,4 @@
-# Файл описывает CI/CD-конвейер для соответствующего контура решения.
-stages:
-  - build
-  - push
-  - deploy
-  - verify
-
-.deploy_template: &deploy_template
-  before_script:
-    - chmod +x ci/scripts/*.sh tests/smoke/*.sh
-
-build_images:
-  stage: build
-  script:
-    - echo "Application source code is expected in a sibling repository or CI build context."
-    - echo "Set image tags through Helm values or CI variables before deployment."
-
-push_images:
-  stage: push
-  script:
-    - echo "If application images are built in CI, push them to ${CI_REGISTRY:-GitLab Container Registry}."
-
-deploy_apps:
-  <<: *deploy_template
-  stage: deploy
-  when: manual
-  script:
-    - ./ci/scripts/deploy-apps.sh vm-dev
-
-smoke:
-  <<: *deploy_template
-  stage: verify
-  script:
-    - ./ci/scripts/smoke-tests.sh vm-dev
+# Совместимость со старым путём include. Jobs приложений перенесены в общий infra pipeline,
+# потому что GitLab разворачивается тем же deployment-kit и не является внешней предпосылкой.
+include:
+  - local: ci/templates/infra-pipeline.yml

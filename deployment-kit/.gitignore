@@ -1,6 +1,9 @@
 .terraform/
+.terraform.lock.hcl.tmp
 terraform.tfstate
 terraform.tfstate.backup
+*.tfstate.*
+*.tfplan
 *.retry
 *.log
 .artifacts/
@@ -8,3 +11,10 @@ terraform.tfstate.backup
 *.tar.gz
 __pycache__/
 *.pyc
+*.auto.tfvars
+*.auto.tfvars.json
+*.tfvars.local
+local.env
+.env
+.env.*
+!.env.example

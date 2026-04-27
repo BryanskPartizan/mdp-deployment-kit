@@ -1,0 +1,30 @@
+# stage-профиль сохраняет тот же доменный контур, но увеличивает persistent volumes.
+global:
+  hosts:
+    domain: lab.local
+
+gitlab:
+  webservice:
+    minReplicas: 1
+    maxReplicas: 2
+  sidekiq:
+    minReplicas: 1
+    maxReplicas: 2
+  gitaly:
+    persistence:
+      size: 30Gi
+
+postgresql:
+  primary:
+    persistence:
+      size: 20Gi
+
+redis:
+  master:
+    persistence:
+      size: 8Gi
+
+minio:
+  persistence:
+    size: 20Gi
+

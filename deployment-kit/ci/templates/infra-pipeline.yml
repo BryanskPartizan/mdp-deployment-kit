@@ -6,14 +6,18 @@ stages:
   - bootstrap
   - vault
   - platform
+  - gitlab
+  - apps
   - smoke
   - network
   - security
   - integration
   - resilience
+  - cleanup
 
 variables:
   ENV: "vm-dev"
+  ALLOW_INSECURE_DEMO_SECRETS: "false"
 
 default:
   before_script:
@@ -74,6 +78,18 @@ deploy_platform:
   script:
     - make deploy-platform ENV="${ENV}"
 
+deploy_gitlab:
+  stage: gitlab
+  when: manual
+  script:
+    - make deploy-gitlab ENV="${ENV}"
+
+deploy_apps:
+  stage: apps
+  when: manual
+  script:
+    - make deploy-apps ENV="${ENV}"
+
 smoke:
   stage: smoke
   script:
@@ -95,6 +111,11 @@ integration:
     - make test-integration ENV="${ENV}"
     - make test-storage ENV="${ENV}"
 
+gitlab:
+  stage: integration
+  script:
+    - make test-gitlab ENV="${ENV}"
+
 resilience:
   stage: resilience
   script:
@@ -107,7 +128,13 @@ worker_drain:
     - make test-fail-node ENV="${ENV}"
 
 kubeadm_reset:
-  stage: resilience
+  stage: cleanup
   when: manual
   script:
     - CONFIRM_RESET="${ENV}" make kubeadm-reset ENV="${ENV}"
+
+infra_destroy:
+  stage: cleanup
+  when: manual
+  script:
+    - CONFIRM_DESTROY="${ENV}" make infra-destroy ENV="${ENV}"

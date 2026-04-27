@@ -1,0 +1,45 @@
+# Локальные артефакты IDE и ОС.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Terraform state, lock runtime cache и планы не должны попадать в git.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Артефакты deployment-kit создаются локально во время bootstrap/deploy/test.
+deployment-kit/.artifacts/
+deployment-kit/.kube/
+deployment-kit/*.tar.gz
+deployment-kit/ansible/inventory/generated/*.yml
+deployment-kit/ansible/inventory/generated/*.yaml
+
+# Логи, временные файлы и Python cache.
+*.log
+*.retry
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Секреты и локальные overrides.
+*.auto.tfvars
+*.auto.tfvars.json
+*.tfvars.local
+*.secret
+*.secrets
+secrets/
+local.env
+.env
+.env.*
+!.env.example
+

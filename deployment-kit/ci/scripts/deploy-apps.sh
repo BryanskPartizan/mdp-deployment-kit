@@ -6,24 +6,53 @@ ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
 NAMESPACE=${APP_NAMESPACE:-app}
+ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+POSTGRES_CHART_VERSION=${POSTGRES_CHART_VERSION:-18.6.2}
+REDIS_CHART_VERSION=${REDIS_CHART_VERSION:-25.4.1}
+
+secret_or_demo() {
+  local var_name="$1"
+  local demo_value="$2"
+  local value="${!var_name:-}"
+
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return
+  fi
+
+  if [[ "$ALLOW_INSECURE_DEMO_SECRETS" == "true" ]]; then
+    printf '%s' "$demo_value"
+    return
+  fi
+
+  echo "Задайте ${var_name} или включите ALLOW_INSECURE_DEMO_SECRETS=true для demo-стенда." >&2
+  exit 1
+}
 
 create_registry_secret_if_possible() {
-  if [[ -n "${CI_REGISTRY:-}" && -n "${CI_REGISTRY_USER:-}" && -n "${CI_REGISTRY_PASSWORD:-}" ]]; then
+  local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-}}
+  local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-}}
+  local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
+
+  if [[ -n "$registry_server" && -n "$registry_user" && -n "$registry_password" ]]; then
     kubectl -n "$NAMESPACE" delete secret gitlab-registry --ignore-not-found >/dev/null 2>&1 || true
     kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
-      --docker-server="$CI_REGISTRY" \
-      --docker-username="$CI_REGISTRY_USER" \
-      --docker-password="$CI_REGISTRY_PASSWORD"
+      --docker-server="$registry_server" \
+      --docker-username="$registry_user" \
+      --docker-password="$registry_password"
   else
-    echo "Учетные данные CI-реестра не заданы; предполагается, что secret gitlab-registry уже существует либо используются публичные образы."
+    echo "Учетные данные реестра не заданы; предполагается, что secret gitlab-registry уже существует либо используются публичные образы."
   fi
 }
 
 create_postgres_secret() {
   local pg_user=${POSTGRES_APP_USER:-app}
   local pg_db=${POSTGRES_DB:-appdb}
-  local pg_password=${POSTGRES_APP_PASSWORD:-app-password}
-  local pg_admin_password=${POSTGRES_ADMIN_PASSWORD:-postgres-password}
+  local pg_password
+  local pg_admin_password
+
+  pg_password=$(secret_or_demo POSTGRES_APP_PASSWORD "app-demo-password-change-me")
+  pg_admin_password=$(secret_or_demo POSTGRES_ADMIN_PASSWORD "postgres-demo-password-change-me")
 
   kubectl -n "$NAMESPACE" delete secret postgres-auth --ignore-not-found >/dev/null 2>&1 || true
   kubectl -n "$NAMESPACE" create secret generic postgres-auth \
@@ -53,7 +82,11 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 create_registry_secret_if_possible
 create_postgres_secret
 
-helm upgrade --install postgres oci://registry-1.docker.io/bitnamicharts/postgresql \
+helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
+helm repo update bitnami
+
+helm upgrade --install postgres bitnami/postgresql \
+  --version "$POSTGRES_CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --wait \
@@ -61,7 +94,8 @@ helm upgrade --install postgres oci://registry-1.docker.io/bitnamicharts/postgre
   -f kubernetes/apps/postgres/values.yaml \
   -f "$POSTGRES_ENV_FILE"
 
-helm upgrade --install redis oci://registry-1.docker.io/bitnamicharts/redis \
+helm upgrade --install redis bitnami/redis \
+  --version "$REDIS_CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --wait \
   --timeout 15m \

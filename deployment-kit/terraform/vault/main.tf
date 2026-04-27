@@ -25,7 +25,7 @@ locals {
       service_account = "api"
       secret_path     = "app/api"
       demo_secret = {
-        DATABASE_URL = "postgresql://app:app-password@postgres-postgresql.${var.app_namespace}.svc.cluster.local:5432/appdb"
+        DATABASE_URL = "postgresql://app:app-demo-password-change-me@postgres-postgresql.${var.app_namespace}.svc.cluster.local:5432/appdb"
         REDIS_URL    = "redis://redis-master.${var.app_namespace}.svc.cluster.local:6379"
       }
     }
@@ -43,6 +43,16 @@ locals {
         GATEWAY_BASE_URL = "http://gateway.${var.app_namespace}.svc.cluster.local:8080"
       }
     }
+  }
+
+  # По умолчанию реальные секреты должны приходить через var.app_secret_overrides.
+  # Демонстрационные значения включаются только явным флагом allow_demo_secrets.
+  app_secret_data = {
+    for app_name, app_cfg in local.apps :
+    app_name => merge(
+      var.allow_demo_secrets ? app_cfg.demo_secret : {},
+      lookup(var.app_secret_overrides, app_name, {})
+    )
   }
 }
 
@@ -69,13 +79,18 @@ resource "vault_kubernetes_auth_backend_role" "app" {
   token_ttl                        = 3600
 }
 
-# Демонстрационные секреты нужны для smoke-проверки связки Vault -> Pod.
-# Реальные значения должны передаваться через защищённый tfvars/CI variables.
-resource "vault_kv_secret_v2" "app_demo" {
+# Секреты приложений записываются в Vault из защищённых Terraform variables.
+resource "vault_kv_secret_v2" "app" {
   for_each = local.apps
 
   mount     = vault_mount.app_kv.path
   name      = each.value.secret_path
-  data_json = jsonencode(each.value.demo_secret)
-}
+  data_json = jsonencode(local.app_secret_data[each.key])
 
+  lifecycle {
+    precondition {
+      condition     = length(local.app_secret_data[each.key]) > 0
+      error_message = "Для приложения ${each.key} не переданы секреты. Используйте TF_VAR_app_secret_overrides или явно включите TF_VAR_allow_demo_secrets=true."
+    }
+  }
+}

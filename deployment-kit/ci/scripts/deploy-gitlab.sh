@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Скрипт разворачивает GitLab как devops-компонент платформы через официальный Helm chart.
+set -euo pipefail
+
+ENV_NAME=${1:-vm-dev}
+ARTIFACTS_DIR=.artifacts/${ENV_NAME}
+export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+
+GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
+GITLAB_RELEASE=${GITLAB_RELEASE:-gitlab}
+GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
+GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
+ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+
+require_file() {
+  local path="$1"
+  [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
+}
+
+generate_demo_password() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32
+  else
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n'
+    echo
+  fi
+}
+
+resolve_gitlab_root_password() {
+  local password_file="${ARTIFACTS_DIR}/gitlab-root-password"
+
+  if [[ -n "${GITLAB_ROOT_PASSWORD:-}" ]]; then
+    printf '%s' "$GITLAB_ROOT_PASSWORD"
+    return
+  fi
+
+  if kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
+    kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" -o jsonpath='{.data.password}' | base64 --decode
+    return
+  fi
+
+  if [[ "$ALLOW_INSECURE_DEMO_SECRETS" == "true" ]]; then
+    mkdir -p "$ARTIFACTS_DIR"
+    if [[ ! -f "$password_file" ]]; then
+      generate_demo_password > "$password_file"
+      chmod 0600 "$password_file"
+    fi
+    cat "$password_file"
+    return
+  fi
+
+  echo "Задайте GITLAB_ROOT_PASSWORD или включите ALLOW_INSECURE_DEMO_SECRETS=true для demo-стенда." >&2
+  exit 1
+}
+
+values_for_env() {
+  if [[ "$ENV_NAME" == *stage* ]]; then
+    echo "kubernetes/platform/gitlab/values-stage.yaml"
+  else
+    echo "kubernetes/platform/gitlab/values-dev.yaml"
+  fi
+}
+
+resolve_ingress_ip() {
+  local outputs="${ARTIFACTS_DIR}/terraform-outputs.json"
+
+  if [[ -f "$outputs" ]] && command -v jq >/dev/null 2>&1; then
+    jq -r '.ingress_external_ip.value // empty' "$outputs"
+  fi
+}
+
+require_file "$KUBECONFIG"
+require_file kubernetes/platform/gitlab/values.yaml
+
+kubectl create namespace "$GITLAB_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+ROOT_PASSWORD=$(resolve_gitlab_root_password)
+kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" --ignore-not-found >/dev/null 2>&1 || true
+kubectl -n "$GITLAB_NAMESPACE" create secret generic "$GITLAB_ROOT_SECRET" \
+  --from-literal=password="$ROOT_PASSWORD"
+
+EXTERNAL_IP=$(resolve_ingress_ip)
+HELM_SET_ARGS=()
+if [[ -n "$EXTERNAL_IP" ]]; then
+  HELM_SET_ARGS+=(--set-string "global.hosts.externalIP=${EXTERNAL_IP}")
+fi
+
+helm repo add gitlab https://charts.gitlab.io >/dev/null 2>&1 || true
+helm repo update gitlab
+
+helm upgrade --install "$GITLAB_RELEASE" gitlab/gitlab \
+  --version "$GITLAB_CHART_VERSION" \
+  --namespace "$GITLAB_NAMESPACE" \
+  --create-namespace \
+  --wait \
+  --timeout 45m \
+  -f kubernetes/platform/gitlab/values.yaml \
+  -f "$(values_for_env)" \
+  "${HELM_SET_ARGS[@]}"
+
+kubectl -n "$GITLAB_NAMESPACE" get pods,svc,ingress,pvc
+echo "GitLab root password хранится в Kubernetes secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."
