@@ -4,4 +4,4 @@ network_cidr      = "10.10.10.0/24"
 node_count_cp     = 3
 node_count_worker = 2
 ssh_user          = "ubuntu"
-domain_suffix     = "aws-stage.local"
+domain_suffix     = "mdp"

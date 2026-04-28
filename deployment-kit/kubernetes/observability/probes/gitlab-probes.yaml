@@ -1,0 +1,70 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: deployment-kit-gitlab-probes
+  namespace: observability
+  labels:
+    deployment-kit/component: endpoint-probe
+    deployment-kit/scope: gitlab
+spec:
+  jobLabel: blackbox-exporter
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-blackbox-exporter
+      app.kubernetes.io/instance: blackbox-exporter
+  namespaceSelector:
+    matchNames:
+      - observability
+  endpoints:
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx_insecure
+        target:
+          - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/users/sign_in
+        hostname:
+          - gitlab.mdp
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: gitlab-web
+          action: replace
+        - targetLabel: surface
+          replacement: ingress
+          action: replace
+        - targetLabel: component
+          replacement: gitlab
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: gitlab-web
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_registry
+        target:
+          - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/v2/
+        hostname:
+          - registry.mdp
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: gitlab-registry
+          action: replace
+        - targetLabel: surface
+          replacement: ingress
+          action: replace
+        - targetLabel: component
+          replacement: registry
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: gitlab-registry
+          action: replace

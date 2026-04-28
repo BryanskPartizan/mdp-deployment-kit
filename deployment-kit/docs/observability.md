@@ -4,7 +4,8 @@ Deployment kit устанавливает следующие компонент�
 - Prometheus для сбора метрик;
 - Grafana для визуализации;
 - Loki для хранения логов;
-- Promtail для доставки логов;
+- Alloy для доставки Pod logs и Kubernetes events в Loki;
+- prometheus-blackbox-exporter для активной проверки HTTP/TCP endpoint'ов;
 - metrics-server для задач масштабирования.
 
 Контур наблюдаемости используется для демонстрации:
@@ -13,3 +14,101 @@ Deployment kit устанавливает следующие компонент�
 - потребления ресурсов рабочими нагрузками;
 - реакции системы на искусственно созданную нагрузку;
 - реакции на отказ worker-узла.
+
+## Источники сигналов
+
+Prometheus собирает:
+- стандартные метрики Kubernetes через kube-prometheus-stack;
+- метрики узлов через node-exporter;
+- состояние объектов Kubernetes через kube-state-metrics;
+- метрики ingress-nginx через ServiceMonitor chart'а ingress-nginx;
+- активные HTTP/TCP пробы через blackbox exporter;
+- метрики самого Prometheus, Grafana и Alertmanager.
+
+Loki получает логи Pod'ов и Kubernetes events через Alloy. Grafana подключает два datasource: `Prometheus` и `Loki`.
+
+Alloy разворачивается DaemonSet'ом, но не читает hostPath `/var/log`: конфигурация использует `loki.source.kubernetes` и ограничивает discovery Pod'ами текущего узла через `spec.nodeName`. Это снижает привилегии коллектора логов и убирает необходимость в privileged/root доступе к файловой системе узла.
+
+## Grafana dashboards
+
+Deployment kit поставляет собственную папку Grafana `Deployment Kit` с dashboards:
+
+- `Deployment Kit / Cluster Overview` — состояние узлов, Pod'ов, CPU, memory, рестарты, latency Kubernetes API;
+- `Deployment Kit / Applications` — доступность Deployment'ов namespace `app`, HPA, CPU/memory по Pod'ам, ingress request rate/latency и ошибки из Loki;
+- `Deployment Kit / Endpoints` — blackbox health для внутренних сервисов, ingress endpoints, GitLab, Registry, Vault, PostgreSQL и Redis;
+- `Deployment Kit / Platform` — Vault, GitLab, PVC, активные alerts, ошибки платформенных namespace.
+
+Dashboards поставляются ConfigMap'ом `observability/deployment-kit-grafana-dashboards` с label `grafana_dashboard=1`. Grafana sidecar автоматически импортирует их при `make deploy-platform`.
+
+## Endpoint probing
+
+Blackbox exporter проверяет:
+
+- `api.app.svc.cluster.local:8081/health`;
+- `gateway.app.svc.cluster.local:8080/health`;
+- `frontend.app.svc.cluster.local:8080/health`;
+- ingress-маршруты `app.mdp` и `gateway.mdp` через service ingress-nginx;
+- `gitlab.mdp/users/sign_in`;
+- `registry.mdp/v2/`;
+- Vault health endpoint;
+- TCP-доступность PostgreSQL и Redis.
+
+ServiceMonitor'ы для probes применяются по стадиям:
+- `platform-probes.yaml` применяет `make deploy-platform`;
+- `gitlab-probes.yaml` применяет `make deploy-gitlab`;
+- `app-probes.yaml` применяет `make deploy-apps`.
+
+В YAML-файлах дефолтно указан приватный домен `mdp`. Deploy-скрипты при необходимости подставляют `APP_DOMAIN`, поэтому для публичного домена probes будут проверять `app.<domain>`, `gateway.<domain>`, `gitlab.<domain>` и `registry.<domain>`.
+
+Такой порядок исключает постоянные ложные срабатывания по GitLab/app endpoint'ам до того, как эти компоненты установлены.
+
+Для таких проверок в namespace `app` добавлены отдельные NetworkPolicy-разрешения из namespace `observability`. Это сохраняет default-deny модель и открывает только нужные порты мониторинга.
+
+## Alert rules
+
+PrometheusRule `observability/deployment-kit-platform-alerts` добавляет проверки:
+
+- node not ready;
+- высокий CPU/memory usage кластера;
+- недоступные реплики приложений;
+- CrashLoopBackOff и частые рестарты;
+- ingress 5xx;
+- endpoint down/slow;
+- истечение TLS-сертификата;
+- недоступные реплики Vault/GitLab;
+- заполнение PVC.
+
+## Доступ к Grafana
+
+Локальный port-forward:
+
+```bash
+export KUBECONFIG=.artifacts/vm-dev/admin.conf
+kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80
+```
+
+После этого Grafana доступна на `http://127.0.0.1:3000`.
+
+Логин берётся из `GRAFANA_ADMIN_USER`, пароль — из `GRAFANA_ADMIN_PASSWORD` или Kubernetes Secret:
+
+```bash
+kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 --decode
+echo
+```
+
+## Проверка мониторинга
+
+```bash
+kubectl -n observability get pods
+kubectl -n observability rollout status daemonset/alloy --timeout=300s
+kubectl -n observability get servicemonitor -l deployment-kit/component=alloy
+kubectl -n observability get servicemonitor -l deployment-kit/component=endpoint-probe
+kubectl -n observability get prometheusrule deployment-kit-platform-alerts
+kubectl -n observability get configmap deployment-kit-grafana-dashboards
+```
+
+Полная интеграционная проверка:
+
+```bash
+make test-integration ENV=vm-dev
+```

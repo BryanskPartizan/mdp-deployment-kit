@@ -4,15 +4,18 @@ set -euo pipefail
 
 ENV_NAME=${1:-vm-dev}
 GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
-GITLAB_HOST=${GITLAB_HOST:-gitlab.lab.local}
-GITLAB_REGISTRY_HOST=${GITLAB_REGISTRY_HOST:-registry.lab.local}
+APP_DOMAIN=${APP_DOMAIN:-mdp}
+GITLAB_HOST=${GITLAB_HOST:-gitlab.${APP_DOMAIN}}
+GITLAB_REGISTRY_HOST=${GITLAB_REGISTRY_HOST:-registry.${APP_DOMAIN}}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 TERRAFORM_OUTPUTS=${ARTIFACTS_DIR}/terraform-outputs.json
 
 kubectl get namespace "$GITLAB_NAMESPACE"
+kubectl get namespace ci
 kubectl -n "$GITLAB_NAMESPACE" get secret gitlab-root-password
 kubectl -n "$GITLAB_NAMESPACE" get ingress
 kubectl -n "$GITLAB_NAMESPACE" get pvc
+kubectl -n observability get servicemonitor deployment-kit-gitlab-probes
 
 kubectl -n "$GITLAB_NAMESPACE" get deploy -o name | while read -r deployment; do
   [[ -n "$deployment" ]] || continue
@@ -35,4 +38,3 @@ if [[ -f "$TERRAFORM_OUTPUTS" ]] && command -v jq >/dev/null && command -v curl 
     [[ "$REGISTRY_CODE" =~ ^(200|401)$ ]] || { echo "Неожиданный HTTP code registry: $REGISTRY_CODE" >&2; exit 1; }
   fi
 fi
-

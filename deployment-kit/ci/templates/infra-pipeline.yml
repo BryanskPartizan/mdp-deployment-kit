@@ -3,6 +3,7 @@ stages:
   - validate
   - plan
   - apply
+  - edge
   - bootstrap
   - vault
   - platform
@@ -50,6 +51,18 @@ apply:
     paths:
       - .artifacts/${ENV}/terraform-outputs.json
       - ansible/inventory/generated/hosts.yml
+    expire_in: 1 week
+
+edge_apply:
+  stage: edge
+  when: manual
+  script:
+    - make edge-apply ENV="${ENV}"
+  artifacts:
+    when: always
+    paths:
+      - .artifacts/${ENV}/edge-outputs.json
+      - .artifacts/${ENV}/hosts-mdp
     expire_in: 1 week
 
 kubeadm_bootstrap:

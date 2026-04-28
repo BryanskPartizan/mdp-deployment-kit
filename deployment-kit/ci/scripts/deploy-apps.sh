@@ -9,6 +9,9 @@ NAMESPACE=${APP_NAMESPACE:-app}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
 POSTGRES_CHART_VERSION=${POSTGRES_CHART_VERSION:-18.6.2}
 REDIS_CHART_VERSION=${REDIS_CHART_VERSION:-25.4.1}
+APP_DOMAIN=${APP_DOMAIN:-mdp}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-test-selfsigned}
+IMAGE_REGISTRY=${IMAGE_REGISTRY:-${REGISTRY_SERVER:-registry.${APP_DOMAIN}}}
 
 secret_or_demo() {
   local var_name="$1"
@@ -30,7 +33,7 @@ secret_or_demo() {
 }
 
 create_registry_secret_if_possible() {
-  local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-}}
+  local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-registry.${APP_DOMAIN}}}
   local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-}}
   local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
 
@@ -67,6 +70,17 @@ wait_rollout() {
   local kind="$2"
   local name="$3"
   kubectl -n "$ns" rollout status "$kind/$name" --timeout=600s
+}
+
+render_app_probes() {
+  local output
+  output=$(mktemp)
+  # Probes хранят mdp как безопасный дефолт, а при deploy подставляется текущий APP_DOMAIN.
+  sed \
+    -e "s|app\\.mdp|app.${APP_DOMAIN}|g" \
+    -e "s|gateway\\.mdp|gateway.${APP_DOMAIN}|g" \
+    kubernetes/observability/probes/app-probes.yaml > "$output"
+  echo "$output"
 }
 
 POSTGRES_ENV_FILE=kubernetes/apps/postgres/values-dev.yaml
@@ -107,21 +121,30 @@ helm upgrade --install api kubernetes/apps/api \
   --wait \
   --timeout 10m \
   -f kubernetes/apps/api/values.yaml \
-  -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/api" \
+  --set-string "ingress.host=api.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 helm upgrade --install gateway kubernetes/apps/gateway \
   --namespace "$NAMESPACE" \
   --wait \
   --timeout 10m \
   -f kubernetes/apps/gateway/values.yaml \
-  -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/gateway" \
+  --set-string "ingress.host=gateway.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 helm upgrade --install frontend kubernetes/apps/frontend \
   --namespace "$NAMESPACE" \
   --wait \
   --timeout 10m \
   -f kubernetes/apps/frontend/values.yaml \
-  -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/frontend" \
+  --set-string "ingress.host=app.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 kubectl apply -f kubernetes/security/rbac/
 kubectl apply -f kubernetes/security/network-policies/
@@ -132,5 +155,9 @@ wait_rollout "$NAMESPACE" statefulset redis-master
 wait_rollout "$NAMESPACE" deployment api
 wait_rollout "$NAMESPACE" deployment gateway
 wait_rollout "$NAMESPACE" deployment frontend
+
+APP_PROBES_FILE=$(render_app_probes)
+trap 'rm -f "$APP_PROBES_FILE"' EXIT
+kubectl apply -f "$APP_PROBES_FILE"
 
 kubectl -n "$NAMESPACE" get pods,svc,ingress

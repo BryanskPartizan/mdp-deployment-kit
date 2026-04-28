@@ -5,8 +5,9 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 TERRAFORM_OUTPUTS=${ARTIFACTS_DIR}/terraform-outputs.json
-FRONTEND_HOST=${SMOKE_FRONTEND_HOST:-app.lab.local}
-GATEWAY_HOST=${SMOKE_GATEWAY_HOST:-gateway.lab.local}
+APP_DOMAIN=${APP_DOMAIN:-mdp}
+FRONTEND_HOST=${SMOKE_FRONTEND_HOST:-app.${APP_DOMAIN}}
+GATEWAY_HOST=${SMOKE_GATEWAY_HOST:-gateway.${APP_DOMAIN}}
 
 if [[ ! -f "$TERRAFORM_OUTPUTS" ]]; then
   echo "Terraform outputs не найдены, внешняя проверка NLB пропущена: $TERRAFORM_OUTPUTS"
@@ -33,4 +34,3 @@ curl -kfsS --resolve "${FRONTEND_HOST}:443:${INGRESS_IP}" "https://${FRONTEND_HO
 
 echo "Проверка gateway через ingress NLB: ${GATEWAY_HOST} -> ${INGRESS_IP}"
 curl -kfsS --resolve "${GATEWAY_HOST}:443:${INGRESS_IP}" "https://${GATEWAY_HOST}/health" >/dev/null
-

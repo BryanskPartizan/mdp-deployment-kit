@@ -7,7 +7,13 @@ source "${SCRIPT_DIR}/../lib/k8s-probe.sh"
 
 require_command kubectl
 
-kubectl -n app get networkpolicy default-deny allow-gateway-to-api allow-api-to-postgres allow-api-to-redis
+kubectl -n app get networkpolicy \
+  default-deny \
+  allow-gateway-to-api \
+  allow-api-to-postgres \
+  allow-api-to-redis \
+  allow-observability-scrape \
+  allow-observability-to-datastores
 
 expect_failure "unlabeled app pod -> api:8081" \
   app \
@@ -28,4 +34,3 @@ expect_failure "default namespace -> frontend:8080" \
   default \
   "dk-test=security" \
   "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 frontend.app.svc.cluster.local 8080"
-

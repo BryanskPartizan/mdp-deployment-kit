@@ -7,8 +7,9 @@ network_cidr     = "10.20.10.0/24"
 ssh_public_key_path = "/absolute/path/to/id_ed25519.pub"
 node_count_cp    = 3
 node_count_worker = 2
-allowed_ssh_cidrs = ["0.0.0.0/0"]
-allowed_api_cidrs = ["0.0.0.0/0"]
-allowed_ingress_cidrs = ["0.0.0.0/0"]
+# Замените на внешний IP оператора или VPN CIDR. TEST-NET адрес оставлен как безопасный placeholder.
+allowed_ssh_cidrs = ["203.0.113.10/32"]
+allowed_api_cidrs = ["203.0.113.10/32"]
+allowed_ingress_cidrs = ["203.0.113.10/32"]
 ingress_http_node_port = 30080
 ingress_https_node_port = 30443

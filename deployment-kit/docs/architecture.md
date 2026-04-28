@@ -6,8 +6,9 @@ Deployment kit организован по четырём основным сл�
 2. **Слой сборки кластера** на базе Ansible и kubeadm, отвечающий за формирование self-hosted Kubernetes-кластера из 3 control-plane и 2 worker-узлов.
 3. **Слой Vault**, в котором Terraform устанавливает Vault в Kubernetes и настраивает Kubernetes auth, политики и KV-хранилище секретов.
 4. **Слой платформенных сервисов**, в котором устанавливаются ingress, управление сертификатами, метрики и журналирование.
-5. **DevOps-контур**, в котором разворачивается GitLab и GitLab Container Registry для хранения исходного кода, pipeline и образов.
-6. **Слой прикладного контура**, в котором через Helm разворачиваются PostgreSQL, Redis, API, gateway и frontend.
+5. **Edge-слой**, в котором Terraform управляет приватными hosts-записями, Cloud DNS, Certificate Manager и CDN.
+6. **DevOps-контур**, в котором разворачивается GitLab и GitLab Container Registry для хранения исходного кода, pipeline и образов.
+7. **Слой прикладного контура**, в котором через Helm разворачиваются PostgreSQL, Redis, API, gateway и frontend.
 
 Такая структура намеренно согласована с логикой практической главы ВКР и с последовательностью автоматизированного развертывания решения.
 
@@ -18,5 +19,8 @@ Deployment kit организован по четырём основным сл�
 
 Такой вариант сохраняет переносимость Kubernetes-слоя и при этом даёт рабочую HA-точку входа для пользователей, CI и администраторов.
 
+## Домены и CDN
+Стартовый домен стенда — приватный `mdp`. Он обслуживается через локальные hosts-записи или корпоративный DNS и использует self-signed сертификаты cert-manager. Для публичной публикации предусмотрен отдельный `terraform/edge`: он может создать Cloud DNS записи на ingress IP, выпустить Certificate Manager сертификат для CDN через DNS challenge и создать Yandex Cloud CDN resource для frontend.
+
 ## DevOps-контур
-GitLab устанавливается в namespace `devops` через официальный Helm chart вместе с GitLab Runner и Container Registry. В демонстрационном профиле используются bundled PostgreSQL, Redis и MinIO chart dependencies, потому что цель deployment-kit — поднять самодостаточный стенд. Для промышленной эксплуатации этот слой должен быть переведён на внешние managed PostgreSQL/Redis/Object Storage.
+GitLab устанавливается в namespace `devops` через официальный Helm chart вместе с GitLab Runner и Container Registry. GitLab Runner controller остаётся в `devops`, а CI job pods запускаются в отдельном namespace `ci`, чтобы RBAC runner'а не давал широкие права внутри namespace GitLab. В демонстрационном профиле используются bundled PostgreSQL, Redis и MinIO chart dependencies, потому что цель deployment-kit — поднять самодостаточный стенд. Для промышленной эксплуатации этот слой должен быть переведён на внешние managed PostgreSQL/Redis/Object Storage.

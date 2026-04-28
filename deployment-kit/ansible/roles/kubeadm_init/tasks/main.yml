@@ -1,6 +1,8 @@
 # Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
 - name: Проверка локального каталога артефактов
   delegate_to: localhost
+  # Локальные артефакты пишет оператор/CI runner, а не root на managed node.
+  become: false
   file:
     path: "{{ cluster_artifacts_dir }}"
     state: directory
@@ -47,6 +49,7 @@
 
 - name: Сохранение join-команды worker-узлов локально
   delegate_to: localhost
+  become: false
   copy:
     dest: "{{ cluster_artifacts_dir }}/worker-join-command.sh"
     content: "{{ worker_join_cmd.stdout }}\n"
@@ -54,6 +57,7 @@
 
 - name: Сохранение join-команды control-plane локально
   delegate_to: localhost
+  become: false
   copy:
     dest: "{{ cluster_artifacts_dir }}/control-plane-join-command.sh"
     content: "{{ worker_join_cmd.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}\n"

@@ -6,10 +6,34 @@ grafana:
     passwordKey: admin-password
   service:
     type: ClusterIP
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+    datasources:
+      enabled: true
+  additionalDataSources:
+    # Loki подключается как отдельный datasource, чтобы dashboards могли совмещать метрики и логи.
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.observability.svc.cluster.local:3100
+      jsonData:
+        maxLines: 1000
 prometheus:
   prometheusSpec:
+    ruleSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleNamespaceSelector: {}
+    probeNamespaceSelector: {}
     retention: 7d
     storageSpec:
       volumeClaimTemplate:

@@ -16,3 +16,16 @@ kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?
 kubectl -n observability get pods
 kubectl -n observability wait --for=condition=Ready pods --all --timeout=600s
 
+BLACKBOX_DEPLOYMENTS=$(kubectl -n observability get deployment -l app.kubernetes.io/name=prometheus-blackbox-exporter -o name)
+[[ -n "$BLACKBOX_DEPLOYMENTS" ]] || { echo "Не найден deployment prometheus-blackbox-exporter" >&2; exit 1; }
+while IFS= read -r deployment; do
+  [[ -n "$deployment" ]] || continue
+  kubectl -n observability rollout status "$deployment" --timeout=300s
+done <<<"$BLACKBOX_DEPLOYMENTS"
+
+kubectl -n observability get servicemonitor -l deployment-kit/component=endpoint-probe
+kubectl -n observability rollout status daemonset/alloy --timeout=300s
+kubectl -n observability get servicemonitor -l deployment-kit/component=alloy
+kubectl get clusterrole deployment-kit-alloy
+kubectl -n observability get prometheusrule deployment-kit-platform-alerts
+kubectl -n observability get configmap deployment-kit-grafana-dashboards

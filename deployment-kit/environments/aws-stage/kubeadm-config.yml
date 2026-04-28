@@ -7,6 +7,6 @@ networking:
 apiServer:
   certSANs:
     - 10.10.10.5
-    - demo-api.aws-stage.local
+    - api.mdp
 controllerManager: {}
 scheduler: {}

@@ -5,10 +5,10 @@ KUBECONFIG ?= $(ARTIFACTS_DIR)/admin.conf
 
 export KUBECONFIG
 
-.PHONY: help validate infra-plan infra-apply infra-destroy destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
+.PHONY: help validate infra-plan infra-apply infra-destroy destroy edge-plan edge-apply kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
 
 help:
-	@echo "Targets: validate infra-plan infra-apply infra-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
+	@echo "Targets: validate infra-plan infra-apply infra-destroy edge-plan edge-apply kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
 
 validate:
 	./ci/scripts/validate-static.sh
@@ -23,6 +23,12 @@ infra-destroy:
 	./ci/scripts/terraform-destroy.sh $(ENV)
 
 destroy: infra-destroy
+
+edge-plan:
+	./ci/scripts/edge-plan.sh $(ENV)
+
+edge-apply:
+	./ci/scripts/edge-apply.sh $(ENV)
 
 kubeadm-bootstrap:
 	./ci/scripts/ansible-kubeadm-bootstrap.sh $(ENV)

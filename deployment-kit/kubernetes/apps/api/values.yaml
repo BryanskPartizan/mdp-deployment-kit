@@ -1,6 +1,6 @@
 replicaCount: 2
 image:
-  repository: registry.lab.local/platform/api
+  repository: registry.mdp/platform/api
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 service:
@@ -24,7 +24,8 @@ hpa:
 ingress:
   enabled: false
   className: nginx
-  host: api.lab.local
+  clusterIssuer: test-selfsigned
+  host: api.mdp
   tlsSecretName: api-tls
 config:
   ENVIRONMENT: dev

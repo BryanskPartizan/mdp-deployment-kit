@@ -2,8 +2,20 @@
 
 Deployment kit включает несколько категорий проверок, разделённых по риску и назначению.
 
+Полная последовательность запуска проверок после развертывания стенда описана в `docs/runbook.md`.
+
+## Статическая проверка
+До live-запуска проверяется формат Terraform, shell syntax, Helm rendering, Grafana dashboard JSON, Ansible syntax и Terraform validate, включая `terraform/edge`.
+
+Запуск:
+```bash
+make validate ENV=vm-dev
+```
+
 ## Smoke-тестирование
 Подтверждает доступность endpoint, публикацию через ingress и работу базовых health-check маршрутов.
+
+По умолчанию внешние проверки используют приватный домен `mdp`. Если стенд опубликован на другом домене, задайте `APP_DOMAIN=<domain>` либо точечные переменные `SMOKE_FRONTEND_HOST`, `SMOKE_GATEWAY_HOST`, `GITLAB_HOST`, `GITLAB_REGISTRY_HOST`.
 
 Запуск:
 ```bash
@@ -27,7 +39,7 @@ make test-security ENV=vm-dev
 ```
 
 ## Интеграционное тестирование
-Проверяет rollout платформенных компонентов, StatefulSet/Deployment прикладного контура, наличие Endpoints, HTTP health endpoints и полный путь Vault Agent Injector от Kubernetes ServiceAccount до injected secret file.
+Проверяет rollout платформенных компонентов, наличие Grafana dashboards, PrometheusRule и blackbox ServiceMonitor, StatefulSet/Deployment прикладного контура, наличие Endpoints, HTTP health endpoints и полный путь Vault Agent Injector от Kubernetes ServiceAccount до injected secret file.
 
 Запуск:
 ```bash
@@ -35,7 +47,7 @@ make test-integration ENV=vm-dev
 ```
 
 ## Проверка GitLab
-Проверяет namespace `devops`, root secret, ingress, PVC, rollout Deployment/StatefulSet и внешние endpoints `gitlab.lab.local`/`registry.lab.local`, если доступны Terraform outputs.
+Проверяет namespace `devops`, root secret, ingress, PVC, rollout Deployment/StatefulSet и внешние endpoints `gitlab.mdp`/`registry.mdp`, если доступны Terraform outputs.
 
 Запуск:
 ```bash

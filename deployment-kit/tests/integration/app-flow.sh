@@ -19,6 +19,8 @@ for service_name in api gateway frontend postgres-postgresql redis-master; do
   echo
 done
 
+kubectl -n observability get servicemonitor deployment-kit-app-probes
+
 expect_success "gateway sees api /health" \
   app \
   "app.kubernetes.io/name=gateway,dk-test=integration" \
@@ -33,4 +35,3 @@ expect_success "ingress namespace sees frontend /health" \
   ingress-nginx \
   "dk-test=integration" \
   "curl -fsS --connect-timeout 5 http://frontend.app.svc.cluster.local:8080/health"
-

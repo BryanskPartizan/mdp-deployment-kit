@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: deployment-kit-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: deployment-kit-alloy
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: deployment-kit-observability
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "namespaces", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deployment-kit-alloy
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: deployment-kit-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: deployment-kit-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: observability

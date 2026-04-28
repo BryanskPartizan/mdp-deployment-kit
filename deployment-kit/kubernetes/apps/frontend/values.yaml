@@ -1,6 +1,6 @@
 replicaCount: 2
 image:
-  repository: registry.lab.local/platform/frontend
+  repository: registry.mdp/platform/frontend
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 service:
@@ -24,7 +24,8 @@ hpa:
 ingress:
   enabled: true
   className: nginx
-  host: app.lab.local
+  clusterIssuer: test-selfsigned
+  host: app.mdp
   tlsSecretName: frontend-tls
 config:
   ENVIRONMENT: dev

@@ -153,19 +153,19 @@ variable "enable_nat" {
 variable "allowed_ssh_cidrs" {
   description = "CIDR-диапазоны, которым разрешён доступ по SSH."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["203.0.113.10/32"]
 }
 
 variable "allowed_api_cidrs" {
   description = "CIDR-диапазоны, которым разрешён внешний доступ к HA endpoint Kubernetes API."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["203.0.113.10/32"]
 }
 
 variable "allowed_ingress_cidrs" {
   description = "CIDR-диапазоны, которым разрешён доступ к опубликованным HTTP/HTTPS-сервисам."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["203.0.113.10/32"]
 }
 
 variable "control_plane_endpoint_ip" {

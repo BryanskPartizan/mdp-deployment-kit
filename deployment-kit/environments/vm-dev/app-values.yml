@@ -1,9 +1,9 @@
 gateway:
-  host: gateway.lab.local
+  host: gateway.mdp
 api:
   replicas: 2
 frontend:
-  host: app.lab.local
+  host: app.mdp
 postgres:
   auth:
     database: appdb

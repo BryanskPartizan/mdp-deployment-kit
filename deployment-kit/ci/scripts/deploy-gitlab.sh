@@ -11,6 +11,8 @@ GITLAB_RELEASE=${GITLAB_RELEASE:-gitlab}
 GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
 GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+APP_DOMAIN=${APP_DOMAIN:-mdp}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-test-selfsigned}
 
 require_file() {
   local path="$1"
@@ -69,10 +71,44 @@ resolve_ingress_ip() {
   fi
 }
 
+render_gitlab_probes() {
+  local output
+  output=$(mktemp)
+  # Probes хранят mdp как безопасный дефолт, а при deploy подставляется текущий APP_DOMAIN.
+  sed \
+    -e "s|gitlab\\.mdp|gitlab.${APP_DOMAIN}|g" \
+    -e "s|registry\\.mdp|registry.${APP_DOMAIN}|g" \
+    kubernetes/observability/probes/gitlab-probes.yaml > "$output"
+  echo "$output"
+}
+
+render_gitlab_domain_values() {
+  local output
+  output=$(mktemp)
+  # Ключ annotation содержит точку и slash, поэтому надёжнее передавать его values-файлом, а не helm --set.
+  cat > "$output" <<EOF
+global:
+  hosts:
+    domain: ${APP_DOMAIN}
+    gitlab:
+      name: gitlab.${APP_DOMAIN}
+    registry:
+      name: registry.${APP_DOMAIN}
+    minio:
+      name: minio.${APP_DOMAIN}
+  ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: ${TLS_CLUSTER_ISSUER}
+EOF
+  echo "$output"
+}
+
 require_file "$KUBECONFIG"
 require_file kubernetes/platform/gitlab/values.yaml
+require_file kubernetes/observability/probes/gitlab-probes.yaml
 
 kubectl create namespace "$GITLAB_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace ci --dry-run=client -o yaml | kubectl apply -f -
 
 ROOT_PASSWORD=$(resolve_gitlab_root_password)
 kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" --ignore-not-found >/dev/null 2>&1 || true
@@ -84,6 +120,8 @@ HELM_SET_ARGS=()
 if [[ -n "$EXTERNAL_IP" ]]; then
   HELM_SET_ARGS+=(--set-string "global.hosts.externalIP=${EXTERNAL_IP}")
 fi
+GITLAB_DOMAIN_VALUES_FILE=$(render_gitlab_domain_values)
+trap 'rm -f "$GITLAB_DOMAIN_VALUES_FILE"' EXIT
 
 helm repo add gitlab https://charts.gitlab.io >/dev/null 2>&1 || true
 helm repo update gitlab
@@ -96,7 +134,12 @@ helm upgrade --install "$GITLAB_RELEASE" gitlab/gitlab \
   --timeout 45m \
   -f kubernetes/platform/gitlab/values.yaml \
   -f "$(values_for_env)" \
+  -f "$GITLAB_DOMAIN_VALUES_FILE" \
   "${HELM_SET_ARGS[@]}"
+
+GITLAB_PROBES_FILE=$(render_gitlab_probes)
+trap 'rm -f "$GITLAB_DOMAIN_VALUES_FILE" "$GITLAB_PROBES_FILE"' EXIT
+kubectl apply -f "$GITLAB_PROBES_FILE"
 
 kubectl -n "$GITLAB_NAMESPACE" get pods,svc,ingress,pvc
 echo "GitLab root password хранится в Kubernetes secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."

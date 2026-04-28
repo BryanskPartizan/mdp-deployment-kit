@@ -12,9 +12,18 @@
 - ограничение внешнего доступа через security group и Yandex Network Load Balancer;
 - интеграция секрета реестра для загрузки приватных образов;
 - GitLab root password и Grafana admin password передаются через переменные окружения/CI variables, а не хранятся в values-файлах.
+- шаблонные CIDR для SSH/API/ingress закрыты на TEST-NET placeholder `203.0.113.10/32` и требуют явной замены перед запуском;
+- GitLab signup отключён на initial install;
+- GitLab Runner controller работает в `devops`, а job pods вынесены в отдельный namespace `ci`;
+- GitLab Runner не запускает privileged job pods, имеет resource limits и ограниченный Role только в namespace `ci`;
+- Alloy собирает логи через Kubernetes API без hostPath и privileged-доступа к файловой системе узлов.
+- приватный домен `mdp` использует self-signed TLS, а публичный Let's Encrypt режим включается только явно через `TLS_CLUSTER_ISSUER` и реальный домен;
+- CDN вынесен в отдельный Terraform edge-слой и по умолчанию выключен, чтобы приватный стенд не публиковался наружу случайно.
 
 ## Отложенные меры
 Полноценная интеграция с внешним identity provider, например Keycloak, рассматривается только как направление развития и не входит в завершённый объём реализации.
+
+Для production-grade эксплуатации также нужно заменить demo TLS-модель на публичный ACME/корпоративный issuer, включить TLS для внутреннего Vault listener, убрать `--kubelet-insecure-tls` после настройки kubelet serving certificates, перевести GitLab PostgreSQL/Redis/Object Storage на managed/external сервисы, проверить cache policy CDN на отсутствие приватных данных и добавить отдельную backup/restore процедуру GitLab.
 
 ## Особенности Vault
 Первичный `init/unseal` остаётся операционной процедурой, потому что Vault до инициализации не может принять Terraform-конфигурацию через собственный API. После этого Terraform-слой `terraform/vault` настраивает Kubernetes auth, политики и демонстрационные секреты, а bootstrap-материалы сохраняются в `.artifacts/<env>/vault-init.json` с правами `0600`.

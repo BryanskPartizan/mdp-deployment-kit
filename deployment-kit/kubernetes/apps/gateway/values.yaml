@@ -1,6 +1,6 @@
 replicaCount: 2
 image:
-  repository: registry.lab.local/platform/gateway
+  repository: registry.mdp/platform/gateway
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 service:
@@ -24,7 +24,8 @@ hpa:
 ingress:
   enabled: true
   className: nginx
-  host: gateway.lab.local
+  clusterIssuer: test-selfsigned
+  host: gateway.mdp
   tlsSecretName: gateway-tls
 config:
   ENVIRONMENT: dev
