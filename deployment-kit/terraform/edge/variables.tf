@@ -30,6 +30,11 @@ variable "domain_name" {
   description = "Базовый домен стенда. Для приватного старта используется mdp."
   type        = string
   default     = "mdp"
+
+  validation {
+    condition     = length(trimspace(var.domain_name)) > 0 && !strcontains(var.domain_name, "://")
+    error_message = "domain_name должен быть доменным суффиксом без схемы URL."
+  }
 }
 
 variable "ingress_external_ip" {
@@ -88,6 +93,11 @@ variable "dns_ttl" {
   description = "TTL DNS-записей в секундах."
   type        = number
   default     = 300
+
+  validation {
+    condition     = var.dns_ttl >= 60
+    error_message = "dns_ttl должен быть не меньше 60 секунд."
+  }
 }
 
 variable "extra_ingress_hostnames" {
@@ -143,6 +153,12 @@ variable "cdn_create_managed_certificate" {
   default     = false
 }
 
+variable "cdn_wait_managed_certificate_validation" {
+  description = "Ждать выпуска managed certificate во время apply. Для первого публичного DNS bootstrap можно временно поставить false."
+  type        = bool
+  default     = true
+}
+
 variable "cdn_redirect_http_to_https" {
   description = "Включать redirect HTTP -> HTTPS на CDN, если задан сертификат."
   type        = bool
@@ -153,6 +169,11 @@ variable "cdn_edge_cache_seconds" {
   description = "Базовый edge cache TTL для CDN, если origin не задаёт свои cache headers."
   type        = number
   default     = 3600
+
+  validation {
+    condition     = var.cdn_edge_cache_seconds >= 0
+    error_message = "cdn_edge_cache_seconds не может быть отрицательным."
+  }
 }
 
 variable "cdn_ignore_cookie" {

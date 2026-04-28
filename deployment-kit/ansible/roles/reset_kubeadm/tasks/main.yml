@@ -42,18 +42,22 @@
 
 - name: Очистка iptables filter-таблицы
   command: iptables -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка iptables nat-таблицы
   command: iptables -t nat -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка iptables mangle-таблицы
   command: iptables -t mangle -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка пользовательских iptables chains
   command: iptables -X
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка IPVS-таблиц при наличии ipvsadm
@@ -82,4 +86,3 @@
     - "{{ cluster_artifacts_dir }}/vault-init.json"
     - "{{ cluster_artifacts_dir }}/vault-kubernetes-ca.crt"
   run_once: true
-

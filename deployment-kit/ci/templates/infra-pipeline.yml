@@ -37,6 +37,7 @@ plan:
     - make infra-plan ENV="${ENV}"
   artifacts:
     when: always
+    access: maintainer
     paths:
       - .artifacts/${ENV}/tfplan
     expire_in: 1 week
@@ -48,6 +49,7 @@ apply:
     - make infra-apply ENV="${ENV}"
   artifacts:
     when: always
+    access: maintainer
     paths:
       - .artifacts/${ENV}/terraform-outputs.json
       - ansible/inventory/generated/hosts.yml
@@ -60,9 +62,11 @@ edge_apply:
     - make edge-apply ENV="${ENV}"
   artifacts:
     when: always
+    access: maintainer
     paths:
       - .artifacts/${ENV}/edge-outputs.json
-      - .artifacts/${ENV}/hosts-mdp
+      - .artifacts/${ENV}/hosts-file
+      - .artifacts/${ENV}/hosts-*
     expire_in: 1 week
 
 kubeadm_bootstrap:
@@ -71,11 +75,12 @@ kubeadm_bootstrap:
   script:
     - make kubeadm-bootstrap ENV="${ENV}"
   artifacts:
-    when: always
+    # kubeconfig нужен следующим manual-стадиям, но это чувствительный артефакт.
+    # Join-команды не публикуем: они остаются только в защищённом workspace runner'а.
+    access: maintainer
     paths:
       - .artifacts/${ENV}/admin.conf
-      - .artifacts/${ENV}/*join-command.sh
-    expire_in: 1 week
+    expire_in: 2 hours
 
 deploy_vault:
   stage: vault

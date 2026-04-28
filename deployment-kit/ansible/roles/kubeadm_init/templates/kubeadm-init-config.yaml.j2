@@ -20,7 +20,17 @@ networking:
   serviceSubnet: {{ service_subnet }}
 apiServer:
   certSANs:
-    - "{{ control_plane_endpoint.split(':')[0] }}"
-    - "{{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}"
+{% set cert_sans = [control_plane_endpoint.split(':')[0]] %}
+{% for host in groups['control_plane'] | default([]) %}
+{% set _ = cert_sans.append(hostvars[host].node_ip | default(hostvars[host].ansible_host | default(host))) %}
+{% set _ = cert_sans.append(hostvars[host].ansible_host | default('')) %}
+{% set _ = cert_sans.append(hostvars[host].inventory_hostname | default(host)) %}
+{% endfor %}
+{% for san in kubeadm_api_server_extra_sans | default([]) %}
+{% set _ = cert_sans.append(san) %}
+{% endfor %}
+{% for san in cert_sans | reject('equalto', '') | unique %}
+    - "{{ san }}"
+{% endfor %}
 controllerManager: {}
 scheduler: {}

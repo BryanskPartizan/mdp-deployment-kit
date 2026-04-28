@@ -11,6 +11,7 @@ GITLAB_RELEASE=${GITLAB_RELEASE:-gitlab}
 GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
 GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+ROTATE_GITLAB_ROOT_PASSWORD=${ROTATE_GITLAB_ROOT_PASSWORD:-false}
 APP_DOMAIN=${APP_DOMAIN:-mdp}
 TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-test-selfsigned}
 
@@ -103,6 +104,23 @@ EOF
   echo "$output"
 }
 
+ensure_gitlab_root_secret() {
+  local password="$1"
+
+  if kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
+    if [[ "$ROTATE_GITLAB_ROOT_PASSWORD" != "true" ]]; then
+      echo "Secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET} уже существует; повторное создание пропущено. Для явной ротации задайте ROTATE_GITLAB_ROOT_PASSWORD=true."
+      return
+    fi
+    # Root password GitLab нельзя silently пересоздавать: это может разойтись с состоянием БД.
+    kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" >/dev/null
+  fi
+
+  kubectl -n "$GITLAB_NAMESPACE" create secret generic "$GITLAB_ROOT_SECRET" \
+    --from-literal=password="$password" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
 require_file "$KUBECONFIG"
 require_file kubernetes/platform/gitlab/values.yaml
 require_file kubernetes/observability/probes/gitlab-probes.yaml
@@ -111,9 +129,7 @@ kubectl create namespace "$GITLAB_NAMESPACE" --dry-run=client -o yaml | kubectl 
 kubectl create namespace ci --dry-run=client -o yaml | kubectl apply -f -
 
 ROOT_PASSWORD=$(resolve_gitlab_root_password)
-kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" --ignore-not-found >/dev/null 2>&1 || true
-kubectl -n "$GITLAB_NAMESPACE" create secret generic "$GITLAB_ROOT_SECRET" \
-  --from-literal=password="$ROOT_PASSWORD"
+ensure_gitlab_root_secret "$ROOT_PASSWORD"
 
 EXTERNAL_IP=$(resolve_ingress_ip)
 HELM_SET_ARGS=()

@@ -38,7 +38,18 @@ if [[ "$SEALED" == "true" || "$STATUS_CODE" -eq 2 ]]; then
     UNSEAL_KEYS+=("$key")
   done < <(jq -r '.unseal_keys_b64[0:3][]' "$VAULT_KEYS_FILE")
 
-  for pod in vault-0 vault-1 vault-2; do
+  VAULT_PODS=()
+  while IFS= read -r pod; do
+    VAULT_PODS+=("$pod")
+  done < <(kubectl --kubeconfig "$KUBECONFIG_PATH" -n "$VAULT_NAMESPACE" get pods -o json | jq -r '.items[].metadata.name | select(test("^vault-[0-9]+$"))' | sort)
+
+  if [[ "${#VAULT_PODS[@]}" -eq 0 ]]; then
+    echo "Не найдены Vault server Pod'ы для unseal." >&2
+    exit 1
+  fi
+
+  # Unseal выполняется по фактическому списку Pod'ов, чтобы replicas можно было менять в Helm values.
+  for pod in "${VAULT_PODS[@]}"; do
     kubectl --kubeconfig "$KUBECONFIG_PATH" -n "$VAULT_NAMESPACE" wait --for=condition=PodScheduled "pod/${pod}" --timeout=300s
     for key in "${UNSEAL_KEYS[@]}"; do
       kubectl --kubeconfig "$KUBECONFIG_PATH" -n "$VAULT_NAMESPACE" exec "$pod" -- vault operator unseal "$key" >/dev/null

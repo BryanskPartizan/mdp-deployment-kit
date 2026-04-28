@@ -1,3 +1,4 @@
+{{- if .Values.networkPolicy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -8,5 +9,10 @@ spec:
       app.kubernetes.io/name: {{ .Chart.Name }}
   policyTypes:
     - Egress
+  {{- if .Values.networkPolicy.egress }}
   egress:
-    - {}
+{{ toYaml .Values.networkPolicy.egress | nindent 4 }}
+  {{- else }}
+  egress: []
+  {{- end }}
+{{- end }}

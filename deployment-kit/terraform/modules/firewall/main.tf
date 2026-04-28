@@ -44,8 +44,8 @@ resource "yandex_vpc_security_group" "this" {
   }
 
   egress {
-    description    = "Разрешить весь исходящий трафик"
+    description    = "Исходящий трафик узлов для bootstrap, registry, package repos и внешних API"
     protocol       = "ANY"
-    v4_cidr_blocks = ["0.0.0.0/0"]
+    v4_cidr_blocks = var.allowed_egress_cidrs
   }
 }

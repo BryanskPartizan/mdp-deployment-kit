@@ -368,7 +368,7 @@ yc compute image get-latest-from-family ubuntu-2204-lts --folder-id standard-ima
 
 ```bash
 make edge-apply ENV=vm-dev
-cat .artifacts/vm-dev/hosts-mdp
+cat .artifacts/vm-dev/hosts-file
 ```
 
 Добавьте полученные строки локально:

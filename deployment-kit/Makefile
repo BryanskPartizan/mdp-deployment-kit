@@ -84,4 +84,4 @@ test-fail-node:
 	./ci/scripts/fail-node-test.sh $(ENV)
 
 package:
-	tar -czf deployment-kit-$(ENV).tar.gz .
+	git archive --format=tar.gz --prefix=deployment-kit/ -o deployment-kit-$(ENV).tar.gz HEAD:deployment-kit

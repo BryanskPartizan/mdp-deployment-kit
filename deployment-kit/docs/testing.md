@@ -23,7 +23,7 @@ make test-smoke ENV=vm-dev
 ```
 
 ## Проверка сетевой связанности
-Проверяет разрешённые маршруты между ingress, gateway, API, PostgreSQL и Redis, а также внешние точки входа Yandex Network Load Balancer. Для проверки используются временные диагностические Pod'ы с теми же labels, которые участвуют в `NetworkPolicy`.
+Проверяет разрешённые маршруты frontend -> gateway, gateway -> API, API -> PostgreSQL/Redis, observability -> health/datastore probes, а также внешние точки входа Yandex Network Load Balancer. Для проверки используются временные диагностические Pod'ы с теми же labels, которые участвуют в `NetworkPolicy`.
 
 Запуск:
 ```bash
@@ -40,6 +40,7 @@ make test-security ENV=vm-dev
 
 ## Интеграционное тестирование
 Проверяет rollout платформенных компонентов, наличие Grafana dashboards, PrometheusRule и blackbox ServiceMonitor, StatefulSet/Deployment прикладного контура, наличие Endpoints, HTTP health endpoints и полный путь Vault Agent Injector от Kubernetes ServiceAccount до injected secret file.
+Тест Vault проверяет наличие ожидаемого ключа, но не печатает значение секрета в logs.
 
 Запуск:
 ```bash

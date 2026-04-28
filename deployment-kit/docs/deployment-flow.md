@@ -31,10 +31,10 @@ Terraform-слой `terraform/platform` устанавливает Vault Helm ch
 На этой стадии устанавливаются namespaces, ingress-контроллер, cert-manager, metrics-server, контур наблюдаемости, blackbox exporter, Grafana dashboards и Prometheus alert rules.
 
 ## Стадия 6. Развертывание GitLab
-GitLab разворачивается как devops-компонент в namespace `devops`. Chart использует внешний ingress-nginx deployment-kit, cert-manager ClusterIssuer `test-selfsigned` и storage class `local-path`. Root password передаётся через Kubernetes Secret `gitlab-root-password`, создаваемый из защищённой переменной `GITLAB_ROOT_PASSWORD`. GitLab Runner controller включён в тот же Helm release, а CI job pods вынесены в namespace `ci`, чтобы runner RBAC не имел широких прав внутри namespace GitLab.
+GitLab разворачивается как devops-компонент в namespace `devops`. Chart использует внешний ingress-nginx deployment-kit, cert-manager ClusterIssuer `test-selfsigned` и storage class `local-path`. Root password передаётся через Kubernetes Secret `gitlab-root-password`, создаваемый из защищённой переменной `GITLAB_ROOT_PASSWORD`; при повторном deploy secret не пересоздаётся без явного `ROTATE_GITLAB_ROOT_PASSWORD=true`. GitLab Runner controller включён в тот же Helm release, а CI job pods вынесены в namespace `ci`, чтобы runner RBAC не имел широких прав внутри namespace GitLab.
 
 ## Стадия 7. Развертывание прикладного контура
-На прикладной стадии развертываются PostgreSQL, Redis, API, gateway и frontend, после чего применяются манифесты безопасности и резервного копирования.
+На прикладной стадии развертываются PostgreSQL, Redis, API, gateway и frontend, после чего применяются манифесты безопасности и резервного копирования. PostgreSQL secret создаётся только при первом запуске, а приложения получают явные egress NetworkPolicy, baseline Pod security context, PDB и topology spread.
 
 ## Стадия 8. Верификация
 Smoke-тесты, нагрузочные проверки и отказовые сценарии подтверждают доступность сервисов, работу масштабирования и реакцию системы на потерю worker-узла.

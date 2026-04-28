@@ -103,7 +103,7 @@ data "yandex_cm_certificate" "cdn" {
 
   depends_on      = [yandex_dns_recordset.cdn_certificate_challenge]
   certificate_id  = yandex_cm_certificate.cdn[0].id
-  wait_validation = true
+  wait_validation = var.cdn_wait_managed_certificate_validation
 }
 
 resource "yandex_cdn_origin_group" "frontend" {

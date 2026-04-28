@@ -8,7 +8,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/name
         operator: In
-        values: ["postgres", "redis"]
+        values: ["postgres", "postgresql", "redis"]
   ingress:
     - from:
         - namespaceSelector:

@@ -13,6 +13,22 @@ if command -v rg >/dev/null 2>&1; then
     echo "Найдены устаревшие приватные домены. Используйте mdp или APP_DOMAIN/domain_name overrides." >&2
     exit 1
   fi
+  if rg -n "\\*join-command|join-command\\.sh" ci/templates; then
+    echo "Join-команды не должны публиковаться как CI artifacts." >&2
+    exit 1
+  fi
+  if rg -n "cat /vault/secrets" tests ci --glob '!ci/scripts/validate-static.sh'; then
+    echo "Тесты не должны печатать содержимое Vault secret files." >&2
+    exit 1
+  fi
+  if rg -n --multiline "egress:\\n\\s+- \\{\\}" kubernetes/apps kubernetes/security; then
+    echo "Найдены NetworkPolicy с полностью открытым egress." >&2
+    exit 1
+  fi
+  if rg -n "delete secret (postgres-auth|gitlab-root-password).*--ignore-not-found" ci/scripts; then
+    echo "Секреты PostgreSQL/GitLab нельзя silently пересоздавать в обычном deploy path." >&2
+    exit 1
+  fi
 fi
 
 template_chart_if_available() {

@@ -23,6 +23,11 @@ variable "allowed_ingress_cidrs" {
   type        = list(string)
 }
 
+variable "allowed_egress_cidrs" {
+  description = "CIDR-диапазоны, куда разрешён исходящий трафик с узлов."
+  type        = list(string)
+}
+
 variable "ingress_http_node_port" {
   description = "NodePort ingress-nginx для HTTP-трафика."
   type        = number

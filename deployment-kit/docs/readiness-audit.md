@@ -38,6 +38,7 @@ terraform -chdir=terraform/edge validate
 - дефолтный приватный домен заменён на `mdp`;
 - добавлен `terraform/edge` для hosts-only режима, Cloud DNS, Certificate Manager и CDN;
 - добавлены `make edge-plan` и `make edge-apply`;
+- hosts-файл сохраняется как `.artifacts/<env>/hosts-file` и дополнительный доменный alias, например `hosts-mdp`;
 - self-signed TLS оставлен дефолтом для `mdp`;
 - Let's Encrypt issuer включается только явно через `TLS_CLUSTER_ISSUER=letsencrypt-staging|letsencrypt-prod`;
 - CDN выключен по умолчанию и предназначен для frontend/static, а не для GitLab/API/registry.
@@ -51,6 +52,7 @@ terraform -chdir=terraform/edge validate
 
 Сделано:
 - root password передаётся через Kubernetes Secret `gitlab-root-password`;
+- secret `gitlab-root-password` не пересоздаётся при повторном deploy без явного `ROTATE_GITLAB_ROOT_PASSWORD=true`;
 - public signup отключён через `global.appConfig.initialDefaults.signupEnabled: false`;
 - product usage data отключён на initial install;
 - bundled nginx-ingress/cert-manager/prometheus выключены, используются platform-компоненты deployment-kit;
@@ -81,6 +83,8 @@ terraform -chdir=terraform/edge validate
 - demo-секреты в deploy scripts доступны только при `ALLOW_INSECURE_DEMO_SECRETS=true`;
 - Vault app secrets по умолчанию требуют `TF_VAR_app_secret_overrides`;
 - GitLab/Grafana/PostgreSQL пароли берутся из переменных окружения или CI variables.
+- PostgreSQL secret создаётся только при отсутствии; повторный deploy не ротирует пароль без `ROTATE_POSTGRES_SECRET=true`;
+- kubeadm join-команды не публикуются как CI artifacts, а `admin.conf` ограничен maintainer-доступом и коротким TTL.
 
 Остаточные ограничения:
 - bootstrap-материалы Vault сохраняются локально в `.artifacts/<env>/vault-init.json`; файл защищается правами `0600`, но требует операционной процедуры хранения/ротации;
@@ -93,10 +97,13 @@ terraform -chdir=terraform/edge validate
 - Kubernetes API публикуется через отдельный NLB;
 - ingress публикуется через отдельный NLB;
 - app namespace использует default deny и явные allow rules;
+- app chart egress больше не открыт полностью: разрешены только DNS, Vault и нужные service-to-service/datastore маршруты;
+- app workloads получили PDB, topology spread и baseline Pod security context;
+- app deployer вынесен в отдельный ServiceAccount `app-deployer`;
 - observability namespace имеет только необходимые разрешения для probes.
 
 Остаточные ограничения:
-- egress security group пока открыт на `0.0.0.0/0`, потому что узлы должны скачивать пакеты и образы без отдельного NAT/proxy слоя;
+- egress security group по умолчанию открыт на `0.0.0.0/0`, потому что узлы должны скачивать пакеты и образы без отдельного NAT/proxy слоя, но теперь диапазон вынесен в `allowed_egress_cidrs`;
 - namespace `devops` не закрыт default-deny NetworkPolicy из-за сложности внутренних потоков GitLab chart;
 - для production нужно добавить egress proxy/NAT policy и отдельный набор NetworkPolicy для GitLab.
 
@@ -108,7 +115,7 @@ terraform -chdir=terraform/edge validate
 - убрать `--kubelet-insecure-tls` у metrics-server после настройки kubelet serving certificates;
 - перевести GitLab PostgreSQL/Redis/Object Storage на managed/external сервисы;
 - добавить GitLab backup/restore;
-- добавить supply-chain проверки образов: SBOM, vulnerability scan, подписи образов;
+- расширить supply-chain проверки образов: подписи образов; SBOM и базовый Trivy scan добавлены в app pipeline template;
 - подготовить реальные demo/app images и проверить registry push/pull;
 - выполнить полный live-прогон в Yandex Cloud.
 

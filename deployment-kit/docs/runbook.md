@@ -128,9 +128,12 @@ node_count_worker   = 2
 allowed_ssh_cidrs     = ["<your-ip>/32"]
 allowed_api_cidrs     = ["<your-ip>/32"]
 allowed_ingress_cidrs = ["<your-ip>/32"]
+allowed_egress_cidrs  = ["0.0.0.0/0"] # сузьте до NAT/proxy CIDR, если в организации есть controlled egress
 ```
 
 В шаблонных `terraform.tfvars` используется `203.0.113.10/32` как безопасный TEST-NET placeholder. Его нужно заменить перед реальным запуском, иначе SSH/API/ingress будут недоступны с вашей машины.
+
+Для real deploy не делайте control-plane прерываемым. Если нужен экономичный режим, используйте только `worker_preemptible=true`, а `control_plane_preemptible` оставьте `false`. При наличии bastion/NAT gateway можно убрать публичный NAT с control-plane через `enable_control_plane_nat=false`.
 
 Проверьте Ansible-параметры:
 
@@ -190,10 +193,10 @@ jq '.api_external_ip.value, .ingress_external_ip.value, .control_planes.value, .
 
 ```bash
 make edge-apply ENV=vm-dev
-cat .artifacts/vm-dev/hosts-mdp
+cat .artifacts/vm-dev/hosts-file
 ```
 
-Для браузерного доступа добавьте содержимое `.artifacts/vm-dev/hosts-mdp` в локальный `/etc/hosts`. Для CLI-проверок можно не менять системный DNS и использовать `curl --resolve`.
+Для браузерного доступа добавьте содержимое `.artifacts/vm-dev/hosts-file` в локальный `/etc/hosts`. Дополнительно скрипт создаёт доменный alias, например `.artifacts/vm-dev/hosts-mdp`. Для CLI-проверок можно не менять системный DNS и использовать `curl --resolve`.
 
 Для реального публичного домена или CDN используйте `docs/domain-cdn.md` и `environments/vm-dev/edge.tfvars`.
 
@@ -352,6 +355,8 @@ make deploy-gitlab ENV=vm-dev
 GitLab разворачивается в namespace `devops`, использует ingress `gitlab.mdp` и registry `registry.mdp`. Root password берётся из `GITLAB_ROOT_PASSWORD` или из уже существующего Kubernetes Secret.
 После успешного Helm rollout скрипт добавляет blackbox probes для `gitlab.mdp` и `registry.mdp`.
 
+Скрипт не пересоздаёт `gitlab-root-password`, если secret уже существует. Для осознанной ротации используйте `ROTATE_GITLAB_ROOT_PASSWORD=true` и заранее проверьте процедуру смены root password в GitLab.
+
 Если используется публичный домен, задайте `APP_DOMAIN=<domain>` перед запуском. Скрипт передаст `global.hosts.domain`, `gitlab.<domain>` и `registry.<domain>` в GitLab chart.
 
 Проверки:
@@ -414,8 +419,10 @@ docker login registry.mdp
 make deploy-apps ENV=vm-dev
 ```
 
-Скрипт создаёт registry secret, PostgreSQL secret, устанавливает PostgreSQL, Redis, API, gateway, frontend, RBAC, NetworkPolicy и backup-манифесты.
+Скрипт создаёт или обновляет registry secret, создаёт PostgreSQL secret только если его ещё нет, устанавливает PostgreSQL, Redis, API, gateway, frontend, RBAC, NetworkPolicy и backup-манифесты.
 После успешного rollout скрипт добавляет blackbox probes для внутренних health endpoint'ов, ingress endpoint'ов, PostgreSQL и Redis.
+
+PostgreSQL secret не пересоздаётся при повторном запуске, чтобы не разойтись с паролем уже инициализированной БД. Для явной ротации задайте `ROTATE_POSTGRES_SECRET=true`, но перед этим подготовьте процедуру смены пароля в PostgreSQL и Vault secret overrides.
 
 Проверки:
 
@@ -487,6 +494,7 @@ make test-network ENV=vm-dev
 
 Проверяет:
 
+- разрешённую связанность frontend -> gateway;
 - разрешённую связанность gateway -> API;
 - разрешённую связанность API -> PostgreSQL/Redis;
 - внешние entrypoints API NLB и ingress NLB.
@@ -570,6 +578,8 @@ POSTGRES_ADMIN_PASSWORD
 TF_VAR_app_secret_overrides
 ```
 
+`kubeadm_bootstrap` публикует только `.artifacts/<env>/admin.conf` как restricted artifact с доступом maintainer и коротким TTL. Join-команды не публикуются в CI artifacts.
+
 Для приватных образов:
 
 ```text
@@ -585,6 +595,8 @@ CI_REGISTRY
 CI_REGISTRY_USER
 CI_REGISTRY_PASSWORD
 ```
+
+Для app pipeline из `ci/templates/app-pipeline.yml` передайте `KUBECONFIG_B64` как protected/masked variable. Это base64 от kubeconfig с минимально нужными правами deployer'а, а не полный локальный `admin.conf`.
 
 Рекомендуемый порядок ручных стадий:
 
@@ -604,6 +616,8 @@ make kubeadm-bootstrap ENV=vm-dev
 ```
 
 Reset очищает kubeadm, etcd, kubelet, CNI и локальные bootstrap-артефакты на узлах, но не удаляет VM, сети и балансировщики.
+
+Полная очистка iptables по умолчанию выключена, чтобы не удалить host-level firewall вне Kubernetes. Если нужно вернуть старое поведение для полностью одноразовых VM, задайте `kubeadm_reset_flush_iptables: true` в Ansible vars.
 
 После reset заново выполняются:
 

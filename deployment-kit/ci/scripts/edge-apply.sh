@@ -44,6 +44,10 @@ terraform -chdir="$TF_DIR" apply \
   "${TF_VAR_ARGS[@]}"
 
 terraform -chdir="$TF_DIR" output -json > "${ART}/edge-outputs.json"
-terraform -chdir="$TF_DIR" output -json hosts_file_entries | jq -r '.[]' > "${ART}/hosts-mdp"
+terraform -chdir="$TF_DIR" output -json hosts_file_entries | jq -r '.[]' > "${ART}/hosts-file"
 
-echo "Локальные DNS-записи сохранены в ${ART}/hosts-mdp."
+DOMAIN_NAME=$(jq -r '.domain_name.value // "domain"' "${ART}/edge-outputs.json")
+DOMAIN_SAFE=${DOMAIN_NAME//[^A-Za-z0-9._-]/_}
+cp "${ART}/hosts-file" "${ART}/hosts-${DOMAIN_SAFE}"
+
+echo "Локальные DNS-записи сохранены в ${ART}/hosts-file и ${ART}/hosts-${DOMAIN_SAFE}."

@@ -5,8 +5,13 @@ metadata:
   namespace: app
 spec:
   podSelector:
-    matchLabels:
-      app.kubernetes.io/name: postgres
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["postgres", "postgresql"]
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: ["postgres"]
   ingress:
     - from:
         - podSelector:

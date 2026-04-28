@@ -4,6 +4,6 @@ metadata:
   name: app-deployer
   namespace: app
 rules:
-  - apiGroups: ["", "apps", "networking.k8s.io", "autoscaling"]
-    resources: ["deployments", "services", "ingresses", "configmaps", "secrets", "horizontalpodautoscalers"]
+  - apiGroups: ["", "apps", "networking.k8s.io", "autoscaling", "policy"]
+    resources: ["deployments", "services", "serviceaccounts", "ingresses", "configmaps", "secrets", "horizontalpodautoscalers", "poddisruptionbudgets", "networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]

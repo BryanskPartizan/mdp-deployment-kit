@@ -2,9 +2,34 @@
 locals {
   network_name = coalesce(var.network_name, "${var.cluster_name}-network")
   subnet_name  = coalesce(var.subnet_name, "${var.cluster_name}-subnet")
-  ssh_key_data = trimspace(coalesce(var.ssh_public_key, file(var.ssh_public_key_path)))
+  ssh_key_data = trimspace(var.ssh_public_key != null ? var.ssh_public_key : (var.ssh_public_key_path != null ? file(var.ssh_public_key_path) : ""))
+  ssh_key_sources_count = length(compact([
+    var.ssh_public_key != null ? "value" : "",
+    var.ssh_public_key_path != null ? "path" : ""
+  ]))
+  worker_preemptible       = var.worker_preemptible != null ? var.worker_preemptible : var.preemptible
+  enable_control_plane_nat = var.enable_control_plane_nat != null ? var.enable_control_plane_nat : var.enable_nat
+  enable_worker_nat        = var.enable_worker_nat != null ? var.enable_worker_nat : var.enable_nat
   # kubeadm получает стабильный endpoint через NLB; ручное значение оставлено как аварийное переопределение.
   control_plane_endpoint_ip = coalesce(var.control_plane_endpoint_ip, module.load_balancer.api_external_ip)
+}
+
+resource "terraform_data" "input_guardrails" {
+  input = {
+    cluster_name = var.cluster_name
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.ssh_key_sources_count == 1 && length(local.ssh_key_data) > 0
+      error_message = "Передайте ровно один источник SSH-ключа: ssh_public_key или ssh_public_key_path."
+    }
+
+    precondition {
+      condition     = var.control_plane_preemptible == false
+      error_message = "control-plane узлы не должны быть preemptible для HA kubeadm-кластера."
+    }
+  }
 }
 
 # Модуль сети создаёт VPC и подсеть для будущего кластера.
@@ -24,6 +49,7 @@ module "firewall" {
   allowed_ssh_cidrs       = var.allowed_ssh_cidrs
   allowed_api_cidrs       = var.allowed_api_cidrs
   allowed_ingress_cidrs   = var.allowed_ingress_cidrs
+  allowed_egress_cidrs    = var.allowed_egress_cidrs
   ingress_http_node_port  = var.ingress_http_node_port
   ingress_https_node_port = var.ingress_https_node_port
 }
@@ -51,8 +77,10 @@ module "compute" {
   worker_cores               = var.worker_cores
   worker_memory_gb           = var.worker_memory_gb
   worker_disk_size_gb        = var.worker_disk_size_gb
-  enable_nat                 = var.enable_nat
-  preemptible                = var.preemptible
+  enable_control_plane_nat   = local.enable_control_plane_nat
+  enable_worker_nat          = local.enable_worker_nat
+  control_plane_preemptible  = var.control_plane_preemptible
+  worker_preemptible         = local.worker_preemptible
   control_plane_endpoint_ip  = var.control_plane_endpoint_ip
 }
 

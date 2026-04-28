@@ -7,6 +7,7 @@ ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
 NAMESPACE=${APP_NAMESPACE:-app}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+ROTATE_POSTGRES_SECRET=${ROTATE_POSTGRES_SECRET:-false}
 POSTGRES_CHART_VERSION=${POSTGRES_CHART_VERSION:-18.6.2}
 REDIS_CHART_VERSION=${REDIS_CHART_VERSION:-25.4.1}
 APP_DOMAIN=${APP_DOMAIN:-mdp}
@@ -38,11 +39,12 @@ create_registry_secret_if_possible() {
   local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
 
   if [[ -n "$registry_server" && -n "$registry_user" && -n "$registry_password" ]]; then
-    kubectl -n "$NAMESPACE" delete secret gitlab-registry --ignore-not-found >/dev/null 2>&1 || true
+    # Registry secret можно обновлять без удаления: так kubelet не видит временный разрыв.
     kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
       --docker-server="$registry_server" \
       --docker-username="$registry_user" \
-      --docker-password="$registry_password"
+      --docker-password="$registry_password" \
+      --dry-run=client -o yaml | kubectl apply -f -
   else
     echo "Учетные данные реестра не заданы; предполагается, что secret gitlab-registry уже существует либо используются публичные образы."
   fi
@@ -54,15 +56,24 @@ create_postgres_secret() {
   local pg_password
   local pg_admin_password
 
+  if kubectl -n "$NAMESPACE" get secret postgres-auth >/dev/null 2>&1; then
+    if [[ "$ROTATE_POSTGRES_SECRET" != "true" ]]; then
+      echo "Secret ${NAMESPACE}/postgres-auth уже существует; повторное создание пропущено. Для явной ротации задайте ROTATE_POSTGRES_SECRET=true."
+      return
+    fi
+    # Ротация пароля PostgreSQL должна быть осознанной: chart не меняет пароль в уже инициализированной БД автоматически.
+    kubectl -n "$NAMESPACE" delete secret postgres-auth >/dev/null
+  fi
+
   pg_password=$(secret_or_demo POSTGRES_APP_PASSWORD "app-demo-password-change-me")
   pg_admin_password=$(secret_or_demo POSTGRES_ADMIN_PASSWORD "postgres-demo-password-change-me")
 
-  kubectl -n "$NAMESPACE" delete secret postgres-auth --ignore-not-found >/dev/null 2>&1 || true
   kubectl -n "$NAMESPACE" create secret generic postgres-auth \
     --from-literal=postgres-password="$pg_admin_password" \
     --from-literal=password="$pg_password" \
     --from-literal=username="$pg_user" \
-    --from-literal=database="$pg_db"
+    --from-literal=database="$pg_db" \
+    --dry-run=client -o yaml | kubectl apply -f -
 }
 
 wait_rollout() {

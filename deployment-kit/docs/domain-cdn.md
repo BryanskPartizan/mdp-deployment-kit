@@ -24,10 +24,10 @@ minio.mdp
 
 ```bash
 make edge-apply ENV=vm-dev
-cat .artifacts/vm-dev/hosts-mdp
+cat .artifacts/vm-dev/hosts-file
 ```
 
-Файл `.artifacts/vm-dev/hosts-mdp` содержит строки вида:
+Файл `.artifacts/vm-dev/hosts-file` содержит строки вида:
 
 ```text
 <INGRESS_IP> app.mdp
@@ -35,6 +35,8 @@ cat .artifacts/vm-dev/hosts-mdp
 <INGRESS_IP> gitlab.mdp
 <INGRESS_IP> registry.mdp
 ```
+
+Для удобства также создаётся доменный alias, например `.artifacts/vm-dev/hosts-mdp`.
 
 Для доступа из браузера добавьте эти строки в локальный `/etc/hosts` или в корпоративный DNS. В тестах можно использовать `curl -k --resolve`, поэтому системный DNS для CI не обязателен.
 
@@ -117,6 +119,14 @@ Terraform создаст:
 - CDN resource `cdn.example.com`;
 - managed certificate в Certificate Manager через DNS CNAME challenge;
 - CNAME `cdn.example.com -> <provider_cname>`.
+
+Если первый apply выполняется до полной DNS delegation, managed certificate может долго ждать validation. В этом случае временно задайте:
+
+```hcl
+cdn_wait_managed_certificate_validation = false
+```
+
+Затем проверьте NS/CNAME challenge и повторите `make edge-apply`.
 
 Для `mdp` CDN не используется: CDN требует публичный hostname, а браузерный TLS на edge должен иметь сертификат для публичного домена.
 

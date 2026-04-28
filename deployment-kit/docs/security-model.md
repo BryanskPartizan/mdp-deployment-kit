@@ -12,11 +12,16 @@
 - ограничение внешнего доступа через security group и Yandex Network Load Balancer;
 - интеграция секрета реестра для загрузки приватных образов;
 - GitLab root password и Grafana admin password передаются через переменные окружения/CI variables, а не хранятся в values-файлах.
+- GitLab/PostgreSQL secrets не пересоздаются при повторном deploy; ротация включается только явными `ROTATE_*` переменными;
+- CI не публикует kubeadm join-команды, а kubeconfig-артефакт ограничен maintainer-доступом и коротким TTL;
 - шаблонные CIDR для SSH/API/ingress закрыты на TEST-NET placeholder `203.0.113.10/32` и требуют явной замены перед запуском;
+- egress security group вынесен в `allowed_egress_cidrs`, чтобы production-контур мог перейти на controlled NAT/proxy;
 - GitLab signup отключён на initial install;
 - GitLab Runner controller работает в `devops`, а job pods вынесены в отдельный namespace `ci`;
 - GitLab Runner не запускает privileged job pods, имеет resource limits и ограниченный Role только в namespace `ci`;
 - Alloy собирает логи через Kubernetes API без hostPath и privileged-доступа к файловой системе узлов.
+- прикладные Pod'ы получили baseline hardening: `runAsNonRoot`, `seccompProfile: RuntimeDefault`, запрет privilege escalation, drop capabilities, read-only root filesystem, PDB и topology spread;
+- прикладной deployer вынесен в отдельный ServiceAccount `app-deployer`, default ServiceAccount больше не получает deploy-права;
 - приватный домен `mdp` использует self-signed TLS, а публичный Let's Encrypt режим включается только явно через `TLS_CLUSTER_ISSUER` и реальный домен;
 - CDN вынесен в отдельный Terraform edge-слой и по умолчанию выключен, чтобы приватный стенд не публиковался наружу случайно.
 

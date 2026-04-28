@@ -9,6 +9,7 @@ require_command kubectl
 
 kubectl -n app get networkpolicy \
   default-deny \
+  allow-frontend-to-gateway \
   allow-gateway-to-api \
   allow-api-to-postgres \
   allow-api-to-redis \
