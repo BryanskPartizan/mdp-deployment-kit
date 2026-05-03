@@ -7,5 +7,9 @@ terraform {
       source  = "yandex-cloud/yandex"
       version = "~> 0.201.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
   }
 }

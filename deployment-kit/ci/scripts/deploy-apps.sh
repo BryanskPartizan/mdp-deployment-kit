@@ -6,13 +6,23 @@ ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
 NAMESPACE=${APP_NAMESPACE:-app}
+GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
+GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
 ROTATE_POSTGRES_SECRET=${ROTATE_POSTGRES_SECRET:-false}
 POSTGRES_CHART_VERSION=${POSTGRES_CHART_VERSION:-18.6.2}
 REDIS_CHART_VERSION=${REDIS_CHART_VERSION:-25.4.1}
-APP_DOMAIN=${APP_DOMAIN:-mdp}
-TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-test-selfsigned}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-${REGISTRY_SERVER:-registry.${APP_DOMAIN}}}
+IMAGE_TAG=${APP_IMAGE_TAG:-${IMAGE_TAG:-0.2.0}}
+
+validate_tls_issuer() {
+  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-staging" ]]; then
+    echo "letsencrypt-staging запрещён. Используйте letsencrypt-prod для публичного домена или test-selfsigned для приватного mdp." >&2
+    exit 1
+  fi
+}
 
 secret_or_demo() {
   local var_name="$1"
@@ -35,19 +45,25 @@ secret_or_demo() {
 
 create_registry_secret_if_possible() {
   local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-registry.${APP_DOMAIN}}}
-  local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-}}
+  local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-root}}
   local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
 
-  if [[ -n "$registry_server" && -n "$registry_user" && -n "$registry_password" ]]; then
-    # Registry secret можно обновлять без удаления: так kubelet не видит временный разрыв.
-    kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
-      --docker-server="$registry_server" \
-      --docker-username="$registry_user" \
-      --docker-password="$registry_password" \
-      --dry-run=client -o yaml | kubectl apply -f -
-  else
-    echo "Учетные данные реестра не заданы; предполагается, что secret gitlab-registry уже существует либо используются публичные образы."
+  if [[ -z "$registry_password" ]] && kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
+    echo "Пароль registry не задан явно; используем secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."
+    registry_password=$(kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" -o jsonpath='{.data.password}' | base64 --decode)
   fi
+
+  if [[ -z "$registry_server" || -z "$registry_user" || -z "$registry_password" ]]; then
+    echo "Не удалось подготовить учетные данные registry. Задайте REGISTRY_SERVER, REGISTRY_USER и REGISTRY_PASSWORD либо убедитесь, что существует ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}." >&2
+    exit 1
+  fi
+
+  # Секрет registry обновляется через apply, чтобы kubelet не видел временный разрыв между delete/create.
+  kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
+    --docker-server="$registry_server" \
+    --docker-username="$registry_user" \
+    --docker-password="$registry_password" \
+    --dry-run=client -o yaml | kubectl apply -f -
 }
 
 create_postgres_secret() {
@@ -86,10 +102,10 @@ wait_rollout() {
 render_app_probes() {
   local output
   output=$(mktemp)
-  # Probes хранят mdp как безопасный дефолт, а при deploy подставляется текущий APP_DOMAIN.
+  # Проверки endpoint'ов хранят публичный профиль pkhco.ru, а при deploy подставляется текущий APP_DOMAIN.
   sed \
-    -e "s|app\\.mdp|app.${APP_DOMAIN}|g" \
-    -e "s|gateway\\.mdp|gateway.${APP_DOMAIN}|g" \
+    -e "s|app\\.pkhco.ru|app.${APP_DOMAIN}|g" \
+    -e "s|gateway\\.pkhco.ru|gateway.${APP_DOMAIN}|g" \
     kubernetes/observability/probes/app-probes.yaml > "$output"
   echo "$output"
 }
@@ -104,6 +120,7 @@ if [[ "$ENV_NAME" == *stage* ]]; then
 fi
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+validate_tls_issuer
 create_registry_secret_if_possible
 create_postgres_secret
 
@@ -134,6 +151,7 @@ helm upgrade --install api kubernetes/apps/api \
   -f kubernetes/apps/api/values.yaml \
   -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml" \
   --set-string "image.repository=${IMAGE_REGISTRY}/platform/api" \
+  --set-string "image.tag=${IMAGE_TAG}" \
   --set-string "ingress.host=api.${APP_DOMAIN}" \
   --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
@@ -144,6 +162,7 @@ helm upgrade --install gateway kubernetes/apps/gateway \
   -f kubernetes/apps/gateway/values.yaml \
   -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml" \
   --set-string "image.repository=${IMAGE_REGISTRY}/platform/gateway" \
+  --set-string "image.tag=${IMAGE_TAG}" \
   --set-string "ingress.host=gateway.${APP_DOMAIN}" \
   --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
@@ -154,6 +173,7 @@ helm upgrade --install frontend kubernetes/apps/frontend \
   -f kubernetes/apps/frontend/values.yaml \
   -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml" \
   --set-string "image.repository=${IMAGE_REGISTRY}/platform/frontend" \
+  --set-string "image.tag=${IMAGE_TAG}" \
   --set-string "ingress.host=app.${APP_DOMAIN}" \
   --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 

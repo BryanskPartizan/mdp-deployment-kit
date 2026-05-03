@@ -28,6 +28,8 @@
     - /var/lib/kubelet
     - /etc/cni/net.d
     - /var/lib/cni
+    - /var/lib/calico
+    - /var/run/calico
     - /run/flannel
     - /var/run/flannel
 
@@ -36,8 +38,18 @@
   loop:
     - cni0
     - flannel.1
+    - vxlan.calico
+    - tunl0
   register: cni_link_delete
   changed_when: cni_link_delete.rc == 0
+  failed_when: false
+
+- name: Удаление Calico workload интерфейсов
+  shell: |
+    ip -o link show | awk -F': ' '/^[0-9]+: cali/ {print $2}' | cut -d@ -f1 | while read -r iface; do
+      ip link delete "$iface" || true
+    done
+  changed_when: false
   failed_when: false
 
 - name: Очистка iptables filter-таблицы

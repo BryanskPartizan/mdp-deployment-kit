@@ -37,7 +37,7 @@ build_image:
     name: "$KANIKO_IMAGE"
     entrypoint: [""]
   script:
-    # Kaniko пишет auth config сам; пароль берётся из защищённых GitLab CI variables.
+    # Kaniko получает Docker auth из защищённых переменных GitLab CI.
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/$DOCKERFILE_PATH" --destination "$IMAGE_REPOSITORY:$IMAGE_TAG" --destination "$IMAGE_REPOSITORY:$CI_COMMIT_REF_SLUG"
@@ -50,7 +50,7 @@ scan_image:
   script:
     # SBOM сохраняется как артефакт, чтобы можно было сверять состав образа между релизами.
     - trivy image --format cyclonedx --output sbom.cdx.json "$IMAGE_REPOSITORY:$IMAGE_TAG"
-    # HIGH/CRITICAL должны блокировать продвижение образа до deploy.
+    # Уязвимости уровня HIGH/CRITICAL блокируют продвижение образа до deploy.
     - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$IMAGE_REPOSITORY:$IMAGE_TAG"
   artifacts:
     access: developer

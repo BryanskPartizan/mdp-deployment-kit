@@ -1,7 +1,7 @@
 replicaCount: 2
 image:
-  repository: registry.mdp/platform/api
-  tag: "0.1.0"
+  repository: registry.pkhco.ru/platform/api
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
@@ -89,8 +89,8 @@ networkPolicy:
 ingress:
   enabled: false
   className: nginx
-  clusterIssuer: test-selfsigned
-  host: api.mdp
+  clusterIssuer: letsencrypt-prod
+  host: api.pkhco.ru
   tlsSecretName: api-tls
 config:
   ENVIRONMENT: dev

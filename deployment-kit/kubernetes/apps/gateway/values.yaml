@@ -1,7 +1,7 @@
 replicaCount: 2
 image:
-  repository: registry.mdp/platform/gateway
-  tag: "0.1.0"
+  repository: registry.pkhco.ru/platform/gateway
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
@@ -73,8 +73,8 @@ networkPolicy:
 ingress:
   enabled: true
   className: nginx
-  clusterIssuer: test-selfsigned
-  host: gateway.mdp
+  clusterIssuer: letsencrypt-prod
+  host: gateway.pkhco.ru
   tlsSecretName: gateway-tls
 config:
   ENVIRONMENT: dev

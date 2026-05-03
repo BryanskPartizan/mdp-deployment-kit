@@ -5,10 +5,10 @@ KUBECONFIG ?= $(ARTIFACTS_DIR)/admin.conf
 
 export KUBECONFIG
 
-.PHONY: help validate infra-plan infra-apply infra-destroy destroy edge-plan edge-apply kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
+.PHONY: help validate infra-plan infra-apply infra-destroy destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps configure-docker-registry-trust configure-docker-insecure-registry docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
 
 help:
-	@echo "Targets: validate infra-plan infra-apply infra-destroy edge-plan edge-apply kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-configure deploy-platform deploy-gitlab deploy-apps test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
+	@echo "Targets: validate infra-plan infra-apply infra-destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps configure-docker-registry-trust configure-docker-insecure-registry docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
 
 validate:
 	./ci/scripts/validate-static.sh
@@ -30,6 +30,9 @@ edge-plan:
 edge-apply:
 	./ci/scripts/edge-apply.sh $(ENV)
 
+edge-destroy:
+	./ci/scripts/edge-destroy.sh $(ENV)
+
 kubeadm-bootstrap:
 	./ci/scripts/ansible-kubeadm-bootstrap.sh $(ENV)
 
@@ -42,6 +45,12 @@ deploy-vault:
 vault-init:
 	./ci/scripts/vault-init.sh $(ENV)
 
+vault-token:
+	./ci/scripts/vault-token.sh $(ENV) show-root
+
+vault-admin-token:
+	./ci/scripts/vault-token.sh $(ENV) create-admin
+
 vault-configure:
 	./ci/scripts/vault-configure.sh $(ENV)
 
@@ -51,8 +60,32 @@ deploy-platform:
 deploy-gitlab:
 	./ci/scripts/deploy-gitlab.sh $(ENV)
 
+prepare-gitlab-registry-projects:
+	./ci/scripts/prepare-gitlab-registry-projects.sh $(ENV)
+
+bootstrap-gitlab-app-ci:
+	./ci/scripts/bootstrap-gitlab-app-ci.sh $(ENV)
+
+deploy-app-charts:
+	./ci/scripts/deploy-app-charts.sh $(ENV)
+
 deploy-apps:
 	./ci/scripts/deploy-apps.sh $(ENV)
+
+configure-docker-registry-trust:
+	./ci/scripts/configure-docker-registry-trust.sh $(ENV)
+
+configure-docker-insecure-registry:
+	./ci/scripts/configure-docker-insecure-registry.sh
+
+docker-registry-login:
+	./ci/scripts/docker-registry-login.sh $(ENV)
+
+build-stub-images:
+	./ci/scripts/build-stub-images.sh
+
+test-stubs:
+	./ci/scripts/test-stub-apps.sh
 
 test-smoke:
 	./ci/scripts/smoke-tests.sh $(ENV)

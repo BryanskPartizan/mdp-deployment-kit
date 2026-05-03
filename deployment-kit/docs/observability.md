@@ -22,6 +22,7 @@ Prometheus собирает:
 - метрики узлов через node-exporter;
 - состояние объектов Kubernetes через kube-state-metrics;
 - метрики ingress-nginx через ServiceMonitor chart'а ingress-nginx;
+- метрики Redis и PostgreSQL через exporter'ы Bitnami chart'ов;
 - активные HTTP/TCP пробы через blackbox exporter;
 - метрики самого Prometheus, Grafana и Alertmanager.
 
@@ -36,6 +37,7 @@ Deployment kit поставляет собственную папку Grafana `D
 - `Deployment Kit / Cluster Overview` — состояние узлов, Pod'ов, CPU, memory, рестарты, latency Kubernetes API;
 - `Deployment Kit / Applications` — доступность Deployment'ов namespace `app`, HPA, CPU/memory по Pod'ам, ingress request rate/latency и ошибки из Loki;
 - `Deployment Kit / Endpoints` — blackbox health для внутренних сервисов, ingress endpoints, GitLab, Registry, Vault, PostgreSQL и Redis;
+- `Deployment Kit / Redis and PostgreSQL` — готовность StatefulSet'ов, TCP probes, PostgreSQL connections/transactions, Redis clients/commands, CPU/RAM, PVC free space и ошибки из Loki;
 - `Deployment Kit / Platform` — Vault, GitLab, PVC, активные alerts, ошибки платформенных namespace.
 
 Dashboards поставляются ConfigMap'ом `observability/deployment-kit-grafana-dashboards` с label `grafana_dashboard=1`. Grafana sidecar автоматически импортирует их при `make deploy-platform`.
@@ -47,9 +49,9 @@ Blackbox exporter проверяет:
 - `api.app.svc.cluster.local:8081/health`;
 - `gateway.app.svc.cluster.local:8080/health`;
 - `frontend.app.svc.cluster.local:8080/health`;
-- ingress-маршруты `app.mdp` и `gateway.mdp` через service ingress-nginx;
-- `gitlab.mdp/users/sign_in`;
-- `registry.mdp/v2/`;
+- ingress-маршруты `app.pkhco.ru` и `gateway.pkhco.ru` через service ingress-nginx;
+- `gitlab.pkhco.ru/users/sign_in`;
+- `registry.pkhco.ru/v2/`;
 - Vault health endpoint;
 - TCP-доступность PostgreSQL и Redis.
 
@@ -58,11 +60,13 @@ ServiceMonitor'ы для probes применяются по стадиям:
 - `gitlab-probes.yaml` применяет `make deploy-gitlab`;
 - `app-probes.yaml` применяет `make deploy-apps`.
 
-В YAML-файлах дефолтно указан приватный домен `mdp`. Deploy-скрипты при необходимости подставляют `APP_DOMAIN`, поэтому для публичного домена probes будут проверять `app.<domain>`, `gateway.<domain>`, `gitlab.<domain>` и `registry.<domain>`.
+В YAML-файлах может оставаться приватный fallback `mdp`, но deploy-скрипты подставляют текущий `APP_DOMAIN`. Для дефолтного публичного профиля probes проверяют `app.pkhco.ru`, `gateway.pkhco.ru`, `gitlab.pkhco.ru` и `registry.pkhco.ru`.
 
 Такой порядок исключает постоянные ложные срабатывания по GitLab/app endpoint'ам до того, как эти компоненты установлены.
 
 Для таких проверок в namespace `app` добавлены отдельные NetworkPolicy-разрешения из namespace `observability`. Это сохраняет default-deny модель и открывает только нужные порты мониторинга.
+
+NetworkPolicy-разрешения реально применяются только при CNI с policy enforcement. Дефолтный kubeadm bootstrap использует Calico; Flannel-only кластер оставлен только как fallback и не проходит security baseline.
 
 ## Alert rules
 
@@ -76,6 +80,8 @@ PrometheusRule `observability/deployment-kit-platform-alerts` добавляет
 - endpoint down/slow;
 - истечение TLS-сертификата;
 - недоступные реплики Vault/GitLab;
+- недоступность Redis/PostgreSQL;
+- отказ TCP-probe datastore'ов;
 - заполнение PVC.
 
 ## Доступ к Grafana

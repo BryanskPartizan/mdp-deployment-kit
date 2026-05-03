@@ -4,7 +4,7 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 TERRAFORM_OUTPUTS=${ARTIFACTS_DIR}/terraform-outputs.json
-APP_DOMAIN=${APP_DOMAIN:-mdp}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
 
 # Проверяем, что прикладные сервисы и сетевые политики действительно созданы.
 kubectl -n app get svc api gateway frontend

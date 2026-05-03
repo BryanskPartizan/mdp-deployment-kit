@@ -105,6 +105,12 @@ variable "ssh_public_key_path" {
   default     = null
 }
 
+variable "ssh_private_key_path" {
+  description = "Путь к приватному SSH-ключу для Ansible inventory. Если не задан, выводится из ssh_public_key_path без суффикса .pub."
+  type        = string
+  default     = null
+}
+
 variable "platform_id" {
   description = "Идентификатор платформы Yandex Compute Cloud."
   type        = string

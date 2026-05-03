@@ -7,15 +7,11 @@ Deployment-kit разделяет два режима публикации:
 
 ## Приватный режим mdp
 
-По умолчанию используются hostnames:
+Приватный режим включается явно:
 
-```text
-app.mdp
-gateway.mdp
-api.mdp
-gitlab.mdp
-registry.mdp
-minio.mdp
+```bash
+export APP_DOMAIN=mdp
+export TLS_CLUSTER_ISSUER=test-selfsigned
 ```
 
 `mdp` не является публичным доменом, поэтому стартовый TLS-режим — `test-selfsigned`. Это осознанный дефолт: стенд можно поднять без регистрации домена, DNS delegation и ACME-зависимостей.
@@ -40,7 +36,7 @@ cat .artifacts/vm-dev/hosts-file
 
 Для доступа из браузера добавьте эти строки в локальный `/etc/hosts` или в корпоративный DNS. В тестах можно использовать `curl -k --resolve`, поэтому системный DNS для CI не обязателен.
 
-Smoke, network, GitLab и load проверки используют `mdp` как fallback. Для публичного домена достаточно экспортировать `APP_DOMAIN=<domain>`, если не нужны точечные overrides.
+Smoke, network, GitLab и load проверки используют публичный `pkhco.ru` как текущий профиль. Для приватного fallback задайте `APP_DOMAIN=mdp` и точечные overrides при необходимости.
 
 ## Edge Terraform layer
 
@@ -74,22 +70,50 @@ create_dns_zone = true
 cdn_enabled     = false
 ```
 
-После `make edge-apply` в Yandex Cloud появится public DNS zone и A-записи на ingress NLB для `app`, `gateway`, `api`, `gitlab`, `registry`, `minio`.
+После `make edge-apply` в выбранном DNS-провайдере появятся public A-записи на ingress NLB для `app`, `gateway`, `api`, `gitlab`, `registry`, `minio` и дополнительных entrypoints.
 
 Если zone создаётся в Yandex Cloud, у регистратора домена нужно делегировать NS-записи на NS-серверы созданной Cloud DNS zone. Без delegation публичные клиенты не смогут найти записи.
+
+Если домен управляется в Cloudflare, используйте DNS only записи:
+
+```hcl
+domain_name        = "pkhco.ru"
+dns_provider       = "cloudflare"
+dns_mode           = "public"
+cloudflare_proxied = false
+create_dns_zone    = false
+cdn_enabled        = false
+
+extra_ingress_hostnames = {
+  grafana   = "grafana.pkhco.ru"
+  kas       = "kas.pkhco.ru"
+  k8s_admin = "k8s-admin.pkhco.ru"
+  vault     = "vault.pkhco.ru"
+}
+```
+
+Перед `make edge-apply` задайте Cloudflare credentials:
+
+```bash
+export TF_VAR_cloudflare_zone_id=<cloudflare-zone-id>
+export TF_VAR_cloudflare_api_token=<cloudflare-dns-token>
+```
+
+Cloudflare proxy должен быть выключен (`cloudflare_proxied=false`): GitLab, Registry, Vault и Headlamp публикуются напрямую через ingress NLB.
+
+Для `k8s-admin.<domain>` обязательно включайте basic auth:
+
+```bash
+export K8S_ADMIN_ENABLED=true
+export K8S_ADMIN_BASIC_AUTH_HTPASSWD="$(htpasswd -nbB admin '<strong-password>')"
+```
 
 Для Kubernetes ingress укажите домен и TLS issuer в `.env`:
 
 ```bash
 APP_DOMAIN=example.com
-TLS_CLUSTER_ISSUER=letsencrypt-staging
-LETSENCRYPT_EMAIL=admin@example.com
-```
-
-Сначала проверьте staging issuer, затем переключайтесь на production:
-
-```bash
 TLS_CLUSTER_ISSUER=letsencrypt-prod
+LETSENCRYPT_EMAIL=admin@example.com
 ```
 
 `letsencrypt-*` работает только если публичные DNS-записи уже указывают на ingress NLB и порт `80` доступен извне для HTTP-01 challenge.

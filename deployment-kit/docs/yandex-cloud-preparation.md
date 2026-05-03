@@ -2,7 +2,7 @@
 
 Документ описывает действия, которые нужно выполнить в Yandex Cloud до первого запуска `make infra-plan` и `make infra-apply`. Команды ниже выполняются на машине оператора, с которой будет запускаться deployment-kit.
 
-Последняя сверка с официальной документацией Yandex Cloud: 28 апреля 2026.
+Последняя сверка с официальной документацией Yandex Cloud: 29 апреля 2026.
 
 ## 1. Что Terraform будет создавать
 
@@ -63,7 +63,16 @@ yc config set folder-id "$YC_FOLDER_ID"
 
 При создании folder через web console не включайте default network, если она не нужна. Deployment-kit создаёт собственную VPC, а лишняя default network будет занимать квоту.
 
-## 3. Установить и инициализировать Yandex Cloud CLI
+## 3. Установить Terraform и инициализировать Yandex Cloud CLI
+
+Официальный quickstart для macOS использует Homebrew:
+
+```bash
+brew install terraform
+terraform version
+```
+
+Если Terraform уже установлен, достаточно проверить версию. В проекте требуется Terraform `>= 1.7.0`.
 
 Проверьте CLI:
 
@@ -85,15 +94,56 @@ yc config get cloud-id
 yc config get folder-id
 ```
 
-## 4. Создать service account для Terraform
-
-Рекомендуемая модель: Terraform запускается не от личного пользователя, а от отдельного service account.
-
-Создайте service account:
+Для загрузки Yandex Cloud provider настройте Terraform mirror, как в официальной инструкции:
 
 ```bash
+mkdir -p ~/.terraform.d/plugin-cache
+test -f ~/.terraformrc && cp ~/.terraformrc ~/.terraformrc.backup.$(date +%Y%m%d%H%M%S)
+
+cat > ~/.terraformrc <<'EOF'
+plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
+
+provider_installation {
+  network_mirror {
+    url = "https://terraform-mirror.yandexcloud.net/"
+    include = ["registry.terraform.io/*/*"]
+  }
+  direct {
+    exclude = ["registry.terraform.io/*/*"]
+  }
+}
+EOF
+```
+
+Если пересоздаёте `.terraform.lock.hcl` на macOS, фиксируйте provider hashes под нужные платформы:
+
+```bash
+terraform -chdir=terraform/vm providers lock \
+  -net-mirror=https://terraform-mirror.yandexcloud.net \
+  -platform=darwin_arm64 \
+  -platform=linux_amd64 \
+  yandex-cloud/yandex
+```
+
+## 4. Создать новый service account и сразу выдать права
+
+Рекомендуемая модель: Terraform запускается не от личного пользователя, а от отдельного service account. Если предыдущая попытка подготовки уже создавала `dk-terraform`, не переиспользуйте его: создайте новый account с уникальным именем и начните с чистого набора ролей.
+
+Все команды в этом разделе выполняются из административного CLI-профиля пользователя, который имеет право управлять IAM на нужном cloud/folder:
+
+```bash
+yc config profile activate default
+yc config set cloud-id "$YC_CLOUD_ID"
+yc config set folder-id "$YC_FOLDER_ID"
+```
+
+Создайте новый service account:
+
+```bash
+export YC_TERRAFORM_SA_NAME="dk-terraform-$(date +%Y%m%d-%H%M)"
+
 yc iam service-account create \
-  --name dk-terraform \
+  --name "$YC_TERRAFORM_SA_NAME" \
   --folder-id "$YC_FOLDER_ID"
 ```
 
@@ -103,61 +153,75 @@ yc iam service-account create \
 export YC_TERRAFORM_SA_ID="$(
   yc iam service-account list \
     --folder-id "$YC_FOLDER_ID" \
-    --format json | jq -r '.[] | select(.name=="dk-terraform") | .id'
+    --format json | jq -r ".[] | select(.name==\"${YC_TERRAFORM_SA_NAME}\") | .id"
 )"
 
-echo "$YC_TERRAFORM_SA_ID"
+test -n "$YC_TERRAFORM_SA_ID"
+echo "$YC_TERRAFORM_SA_NAME -> $YC_TERRAFORM_SA_ID"
 ```
 
-## 5. Выдать роли service account
-
-Минимальный практичный набор ролей на folder:
-
-```text
-compute.admin
-vpc.admin
-load-balancer.admin
-```
-
-Назначение ролей:
+Для первого запуска deployment-kit выдайте все проектные роли одним блоком. Это bootstrap-модель с широкими правами на уровне folder/cloud; после успешного деплоя её можно сузить.
 
 ```bash
-for role in compute.admin vpc.admin load-balancer.admin; do
+for role in \
+  admin \
+  compute.admin \
+  vpc.admin \
+  vpc.publicAdmin \
+  vpc.securityGroups.admin \
+  load-balancer.admin \
+  dns.editor \
+  cdn.editor \
+  certificate-manager.editor
+do
   yc resource-manager folder add-access-binding "$YC_FOLDER_ID" \
+    --role "$role" \
+    --subject "serviceAccount:${YC_TERRAFORM_SA_ID}"
+done
+
+for role in \
+  admin \
+  resource-manager.viewer \
+  quota-manager.viewer \
+  quota-manager.requestOperator
+do
+  yc resource-manager cloud add-access-binding "$YC_CLOUD_ID" \
     --role "$role" \
     --subject "serviceAccount:${YC_TERRAFORM_SA_ID}"
 done
 ```
 
-Зачем нужны эти роли:
-
-- `compute.admin` — создание VM, boot disks, сетевых интерфейсов и использование образа Ubuntu;
-- `vpc.admin` — создание VPC, subnet, security group, публичных IP и внешней связности;
-- `load-balancer.admin` — создание внешних Network Load Balancer и target groups.
-
-Для лабораторного стенда можно выдать широкую роль `editor`, но для нормальной модели доступа лучше оставить сервисные роли выше.
-
-Если включаете `terraform/edge` для публичного DNS/CDN, дополнительно понадобятся роли:
-
-```text
-dns.editor
-cdn.editor
-certificate-manager.editor
-```
-
-Назначить их можно так:
+Проверьте, что роли видны:
 
 ```bash
-for role in dns.editor cdn.editor certificate-manager.editor; do
-  yc resource-manager folder add-access-binding "$YC_FOLDER_ID" \
-    --role "$role" \
-    --subject "serviceAccount:${YC_TERRAFORM_SA_ID}"
-done
+yc resource-manager folder list-access-bindings "$YC_FOLDER_ID" \
+  --format json | jq -r ".[] | select(.subject.id == \"${YC_TERRAFORM_SA_ID}\") | .role_id" | sort
+
+yc resource-manager cloud list-access-bindings "$YC_CLOUD_ID" \
+  --format json | jq -r ".[] | select(.subject.id == \"${YC_TERRAFORM_SA_ID}\") | .role_id" | sort
 ```
 
-Для дефолтного режима `dns_mode = "hosts"` эти роли не обязательны: edge-слой только сохраняет локальный hosts-файл.
+### Org-level права только при необходимости
 
-## 6. Подготовить аутентификацию Terraform
+В нормальном случае прав на folder/cloud достаточно. Если даже после `admin` на folder/cloud прямой тест `yc vpc address create` от service account возвращает `PermissionDenied`, значит в организации может действовать политика, которая требует org-level прав или отдельного разрешения владельца организации.
+
+Этот блок расширяет blast radius на всю организацию. Выполняйте его только если вы осознанно принимаете такой риск для bootstrap-стенда:
+
+```bash
+export YC_ORG_ID="<organization_id>"
+
+yc organization-manager organization add-access-binding "$YC_ORG_ID" \
+  --role admin \
+  --subject "serviceAccount:${YC_TERRAFORM_SA_ID}"
+
+yc organization-manager organization add-access-binding "$YC_ORG_ID" \
+  --role organization-manager.viewer \
+  --subject "serviceAccount:${YC_TERRAFORM_SA_ID}"
+```
+
+После успешного первого деплоя вернитесь к least-privilege модели: оставьте только роли, которые реально нужны выбранным Terraform-слоям.
+
+## 5. Подготовить аутентификацию Terraform
 
 Текущий Terraform provider в проекте ожидает IAM token через переменную `TF_VAR_yc_token`.
 
@@ -165,7 +229,7 @@ done
 
 Это предпочтительный вариант для локального запуска: пользователь остаётся аутентифицирован в CLI, но операции Terraform выполняются токеном service account.
 
-Пользователь или CI principal должен иметь роль `iam.serviceAccounts.tokenCreator` на service account `dk-terraform`.
+Пользователь или CI principal должен иметь роль `iam.serviceAccounts.tokenCreator` на новом service account из `YC_TERRAFORM_SA_ID`.
 
 Назначить роль можно через IAM UI или CLI:
 
@@ -178,11 +242,16 @@ yc iam service-account add-access-binding "$YC_TERRAFORM_SA_ID" \
 Получить IAM token:
 
 ```bash
-export TF_VAR_yc_token="$(
+export YC_TOKEN="$(
   yc iam create-token \
     --impersonate-service-account-id "$YC_TERRAFORM_SA_ID"
 )"
+export YC_CLOUD_ID="$(yc config get cloud-id)"
+export YC_FOLDER_ID="$(yc config get folder-id)"
+export TF_VAR_yc_token="$YC_TOKEN"
 ```
+
+Официальный Terraform quickstart использует `YC_TOKEN`, `YC_CLOUD_ID` и `YC_FOLDER_ID`. Deployment-kit дополнительно экспортирует `TF_VAR_yc_token`, потому что текущий provider block получает token через Terraform variable `yc_token`.
 
 IAM token живёт ограниченное время. Перед долгим `terraform plan/apply` лучше выпускать новый токен.
 
@@ -195,9 +264,11 @@ IAM token живёт ограниченное время. Перед долги�
 ```bash
 mkdir -p .secrets
 chmod 700 .secrets
+test -f .secrets/yc-dk-terraform-key.json && \
+  mv .secrets/yc-dk-terraform-key.json ".secrets/yc-dk-terraform-key.$(date +%Y%m%d%H%M%S).json"
 ```
 
-Создайте authorized key:
+Создайте authorized key для нового service account:
 
 ```bash
 yc iam key create \
@@ -208,10 +279,10 @@ yc iam key create \
 chmod 600 .secrets/yc-dk-terraform-key.json
 ```
 
-Создайте отдельный CLI profile:
+Создайте или обновите отдельный CLI profile:
 
 ```bash
-yc config profile create dk-terraform-sa
+yc config profile create dk-terraform-sa || yc config profile activate dk-terraform-sa
 yc config set service-account-key .secrets/yc-dk-terraform-key.json
 yc config set cloud-id "$YC_CLOUD_ID"
 yc config set folder-id "$YC_FOLDER_ID"
@@ -220,12 +291,15 @@ yc config set folder-id "$YC_FOLDER_ID"
 Получите IAM token для Terraform:
 
 ```bash
-export TF_VAR_yc_token="$(yc iam create-token)"
+export YC_TOKEN="$(yc iam create-token)"
+export YC_CLOUD_ID="$(yc config get cloud-id)"
+export YC_FOLDER_ID="$(yc config get folder-id)"
+export TF_VAR_yc_token="$YC_TOKEN"
 ```
 
 Файл `.secrets/yc-dk-terraform-key.json` не должен попадать в Git.
 
-## 7. Проверить квоты
+## 6. Проверить квоты
 
 Для стандартного `vm-dev` проверьте, что в cloud достаточно свободных квот:
 
@@ -248,6 +322,15 @@ Network Load Balancer:
 - 2 свободных target group.
 ```
 
+Проверка квот не обязательна для работы Terraform, но сильно снижает риск падения `apply` в середине создания ресурсов. В clean-start блоке выше service account уже получает `quota-manager.viewer`, `quota-manager.requestOperator` и `resource-manager.viewer` на уровне cloud. Если проверяете квоты из личного профиля, у пользователя должны быть аналогичные права или admin/editor на cloud.
+
+Сначала посмотрите фактические service IDs, доступные в вашем cloud:
+
+```bash
+yc quota-manager quota-limit list-services \
+  --resource-type resource-manager.cloud
+```
+
 Посмотреть квоты через CLI:
 
 ```bash
@@ -262,7 +345,7 @@ yc quota-manager quota-limit list \
   --resource-id "$YC_CLOUD_ID"
 
 yc quota-manager quota-limit list \
-  --service load-balancer \
+  --service ylb \
   --resource-type resource-manager.cloud \
   --resource-id "$YC_CLOUD_ID"
 ```
@@ -271,8 +354,8 @@ yc quota-manager quota-limit list \
 
 ```text
 compute.instances.count
-compute.cores.count
-compute.memory.size
+compute.instanceCores.count
+compute.instanceMemory.size
 compute.hddDisks.size
 vpc.networks.count
 vpc.subnets.count
@@ -285,7 +368,7 @@ ylb.targetGroups.count
 
 Если квоты уже заняты другими ресурсами, либо удалите лишние ресурсы, либо запросите увеличение квот до запуска Terraform.
 
-## 8. Подготовить SSH-ключ
+## 7. Подготовить SSH-ключ
 
 Ansible подключается к VM по SSH. Создайте отдельный ключ для стенда:
 
@@ -304,7 +387,7 @@ ssh_user            = "ubuntu"
 
 Terraform передаёт публичный ключ в metadata VM через поле `ssh-keys`.
 
-## 9. Выбрать CIDR и доступы
+## 8. Выбрать CIDR и доступы
 
 Проверьте `environments/vm-dev/terraform.tfvars`:
 
@@ -337,7 +420,7 @@ curl -4 ifconfig.me
 
 В репозитории используется безопасный placeholder `203.0.113.10/32`; это TEST-NET адрес, который нужно заменить перед `make infra-plan`.
 
-## 10. Проверить образ Ubuntu и зону
+## 9. Проверить образ Ubuntu и зону
 
 Проект по умолчанию использует:
 
@@ -356,7 +439,7 @@ yc compute image get-latest-from-family ubuntu-2204-lts --folder-id standard-ima
 
 Если в вашей организации запрещены отдельные зоны или платформы VM, поменяйте `yc_zone`/`platform_id` в `terraform.tfvars` до `make infra-plan`.
 
-## 11. Подготовить DNS-решение
+## 10. Подготовить DNS-решение
 
 Для автоматических тестов публичная DNS-зона не обязательна: скрипты используют IP из `.artifacts/<env>/terraform-outputs.json` и `curl --resolve`.
 
@@ -374,7 +457,7 @@ cat .artifacts/vm-dev/hosts-file
 Добавьте полученные строки локально:
 
 ```text
-<INGRESS_IP> app.mdp gateway.mdp api.mdp gitlab.mdp registry.mdp minio.mdp
+<INGRESS_IP> app.pkhco.ru gateway.pkhco.ru api.pkhco.ru gitlab.pkhco.ru registry.pkhco.ru minio.pkhco.ru
 ```
 
 Этот вариант подходит для demo, потому что `mdp` не является нормальным публичным доменом.
@@ -406,7 +489,7 @@ export APP_DOMAIN=example.com
 
 Подробная модель доменов, TLS и CDN описана в `docs/domain-cdn.md`.
 
-## 12. Проверить исходящий доступ с будущих VM
+## 11. Проверить исходящий доступ с будущих VM
 
 По умолчанию `enable_nat = true`, поэтому VM получают внешний NAT-адрес и смогут скачивать пакеты Ubuntu, containerd, Kubernetes packages и контейнерные образы.
 
@@ -419,7 +502,7 @@ export APP_DOMAIN=example.com
 
 Без исходящего доступа Ansible bootstrap и Helm deployment не завершатся.
 
-## 13. Заполнить файлы deployment-kit
+## 12. Заполнить файлы deployment-kit
 
 Заполните `environments/vm-dev/terraform.tfvars`:
 
@@ -449,8 +532,11 @@ GRAFANA_ADMIN_PASSWORD=<strong_password>
 GITLAB_ROOT_PASSWORD=<strong_password>
 POSTGRES_APP_PASSWORD=<strong_password>
 POSTGRES_ADMIN_PASSWORD=<strong_password>
-APP_DOMAIN=mdp
-TLS_CLUSTER_ISSUER=test-selfsigned
+APP_DOMAIN=pkhco.ru
+TLS_CLUSTER_ISSUER=letsencrypt-prod
+LETSENCRYPT_EMAIL=<admin_email>
+TF_VAR_cloudflare_zone_id=<cloudflare_zone_id>
+TF_VAR_cloudflare_api_token=<cloudflare_dns_token>
 TF_VAR_app_secret_overrides='<json>'
 ```
 
@@ -462,14 +548,15 @@ source .env
 set +a
 ```
 
-## 14. Финальный preflight перед скриптами
+## 13. Финальный preflight перед скриптами
 
 Из каталога `deployment-kit`:
 
 ```bash
 terraform version
 yc config list
-yc iam create-token >/dev/null
+test -n "${YC_TOKEN:-}"
+test -n "${TF_VAR_yc_token:-}"
 test -f "$(grep ssh_public_key_path environments/vm-dev/terraform.tfvars | awk -F'"' '{print $2}')"
 make validate ENV=vm-dev
 ```
@@ -481,7 +568,7 @@ make infra-plan ENV=vm-dev
 make infra-apply ENV=vm-dev
 ```
 
-## 15. Частые ошибки подготовки
+## 14. Частые ошибки подготовки
 
 ### `Quota limit ylb.networkLoadBalancers.count exceeded`
 
@@ -493,17 +580,56 @@ make infra-apply ENV=vm-dev
 
 ### `Permission denied` от Terraform provider
 
-Проверьте, что `TF_VAR_yc_token` выпущен именно для service account `dk-terraform`, а у service account есть роли `compute.admin`, `vpc.admin`, `load-balancer.admin` на нужный folder.
+Проверьте, что `TF_VAR_yc_token` выпущен именно для нового service account, созданного в разделе 4, а роли выданы единым bootstrap-блоком на нужный folder/cloud.
+
+Быстрая проверка public IP от имени service account:
+
+```bash
+yc config profile activate dk-terraform-sa
+export YC_TOKEN="$(yc iam create-token)"
+export TF_VAR_yc_token="$YC_TOKEN"
+
+yc vpc address create \
+  --name dk-permission-test-ip \
+  --folder-id "$YC_FOLDER_ID" \
+  --external-ipv4 "zone=${YC_ZONE:-ru-central1-a}"
+
+yc vpc address delete \
+  --name dk-permission-test-ip \
+  --folder-id "$YC_FOLDER_ID"
+```
+
+Если прямой `yc vpc address create` возвращает `PermissionDenied`, проблема не в Terraform. Проверьте организационные политики или выполните org-level блок из раздела 4.
+
+Если роли уже выданы, проверьте итоговый доступ через access analyzer:
+
+```bash
+export YC_ORG_ID="<organization_id>"
+
+yc iam access-analyzer list-subject-access-bindings \
+  --organization-id "$YC_ORG_ID" \
+  --subject-id "$YC_TERRAFORM_SA_ID" \
+  --format json | jq -r '.[] | [.resource.type, .resource.id, .role_id] | @tsv' | sort
+```
+
+Если access analyzer показывает `admin`, `vpc.admin`, `vpc.publicAdmin` и `vpc.securityGroups.admin` на нужных resource-manager cloud/folder, но прямые команды `yc vpc address create` или `yc vpc security-group update-rules` всё равно возвращают `PermissionDenied`, это уже не ошибка deployment-kit. Такой результат означает ограничение на уровне Yandex Cloud organization/cloud или внутренней политики провайдера. В этом случае сохраните `client-request-id`, `client-trace-id` и trace-файл из ошибки и передайте их в поддержку Yandex Cloud.
 
 ### `IAM token is expired`
 
 IAM token ограничен по времени. Выпустите новый:
 
 ```bash
-export TF_VAR_yc_token="$(
+# Если используется Variant B с authorized key:
+yc config profile activate dk-terraform-sa
+export YC_TOKEN="$(yc iam create-token)"
+export TF_VAR_yc_token="$YC_TOKEN"
+
+# Если используется Variant A с impersonation:
+export YC_TOKEN="$(
   yc iam create-token \
     --impersonate-service-account-id "$YC_TERRAFORM_SA_ID"
 )"
+export TF_VAR_yc_token="$YC_TOKEN"
 ```
 
 ### Ansible не может подключиться по SSH
@@ -516,7 +642,7 @@ export TF_VAR_yc_token="$(
 - VM получили public NAT, если подключение идёт напрямую;
 - пользователь `ssh_user` совпадает с metadata VM, по умолчанию `ubuntu`.
 
-## 16. Официальные ссылки
+## 15. Официальные ссылки
 
 - Yandex Cloud CLI install: https://yandex.cloud/en/docs/cli/operations/install-cli
 - `yc init`: https://yandex.cloud/en/docs/cli/cli-ref/init

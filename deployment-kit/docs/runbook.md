@@ -74,14 +74,24 @@ GRAFANA_ADMIN_PASSWORD=...
 GITLAB_ROOT_PASSWORD=...
 POSTGRES_APP_PASSWORD=...
 POSTGRES_ADMIN_PASSWORD=...
-APP_DOMAIN=mdp
-TLS_CLUSTER_ISSUER=test-selfsigned
-REGISTRY_SERVER=registry.mdp
-IMAGE_REGISTRY=registry.mdp
+APP_DOMAIN=pkhco.ru
+TLS_CLUSTER_ISSUER=letsencrypt-prod
+LETSENCRYPT_EMAIL=<email-for-acme>
+REGISTRY_SERVER=registry.pkhco.ru
+IMAGE_REGISTRY=registry.pkhco.ru
 REGISTRY_USER=...
 REGISTRY_PASSWORD=...
-TF_VAR_app_secret_overrides={...}
+TF_VAR_app_secret_overrides='<json>'
 ```
+
+Для Cloudflare DNS текущего публичного профиля дополнительно нужны:
+
+```bash
+TF_VAR_cloudflare_zone_id=<cloudflare-zone-id>
+TF_VAR_cloudflare_api_token=<cloudflare-dns-token>
+```
+
+Для приватного fallback `mdp` нужно явно переопределить `APP_DOMAIN=mdp`, `TLS_CLUSTER_ISSUER=test-selfsigned`, `REGISTRY_SERVER=registry.mdp`, `IMAGE_REGISTRY=registry.mdp`.
 
 Загрузите переменные в текущую shell-сессию так, чтобы они были экспортированы дочерним процессам:
 
@@ -142,6 +152,16 @@ vi environments/vm-dev/ansible-vars.yml
 vi environments/vm-dev/kubeadm-config.yml
 ```
 
+В `ansible-vars.yml` дефолтный CNI должен быть Calico:
+
+```yaml
+cni_provider: calico
+calico_version: "v3.31.4"
+pod_subnet: "10.244.0.0/16"
+```
+
+Это важно для security baseline: обычный Flannel не применяет Kubernetes `NetworkPolicy`, поэтому `make test-security` будет падать на deny-сценариях.
+
 ## 5. Статическая проверка до запуска
 
 ```bash
@@ -187,9 +207,9 @@ make infra-apply ENV=vm-dev
 jq '.api_external_ip.value, .ingress_external_ip.value, .control_planes.value, .workers.value' .artifacts/vm-dev/terraform-outputs.json
 ```
 
-## 6.1. Настройка приватного домена mdp
+## 6.1. Настройка домена
 
-Стартовый домен стенда — `mdp`. Он не требует публичной DNS-зоны и работает через локальные hosts-записи.
+Текущий `environments/vm-dev/edge.tfvars` настроен на публичный домен `pkhco.ru` в Cloudflare. Для приватного старта можно временно вернуть `domain_name="mdp"`, `dns_provider="hosts"`, `dns_mode="hosts"`: такой режим не требует публичной DNS-зоны и работает через локальные hosts-записи.
 
 ```bash
 make edge-apply ENV=vm-dev
@@ -198,7 +218,23 @@ cat .artifacts/vm-dev/hosts-file
 
 Для браузерного доступа добавьте содержимое `.artifacts/vm-dev/hosts-file` в локальный `/etc/hosts`. Дополнительно скрипт создаёт доменный alias, например `.artifacts/vm-dev/hosts-mdp`. Для CLI-проверок можно не менять системный DNS и использовать `curl --resolve`.
 
-Для реального публичного домена или CDN используйте `docs/domain-cdn.md` и `environments/vm-dev/edge.tfvars`.
+Для публичного `pkhco.ru` используется Cloudflare DNS only. Перед `make edge-apply` задайте Cloudflare credentials:
+
+```bash
+export TF_VAR_cloudflare_zone_id=<cloudflare-zone-id>
+export TF_VAR_cloudflare_api_token=<cloudflare-dns-token>
+make edge-apply ENV=vm-dev
+```
+
+Terraform создаст A-записи на ingress IP для `app.pkhco.ru`, `gateway.pkhco.ru`, `api.pkhco.ru`, `gitlab.pkhco.ru`, `registry.pkhco.ru`, `kas.pkhco.ru`, `grafana.pkhco.ru`, `k8s-admin.pkhco.ru`, `vault.pkhco.ru` и `minio.pkhco.ru`. В Cloudflare эти записи должны оставаться DNS only, без proxy.
+
+Если раньше этот же `terraform/edge` state уже создавал Yandex Cloud DNS zone, перед переключением на Cloudflare посмотрите план:
+
+```bash
+make edge-plan ENV=vm-dev
+```
+
+Если в плане есть удаление старой `yandex_dns_zone` с `deletion_protection=true`, сначала примите решение: удалить старую Yandex zone через Terraform после снятия protection или оставить её как orphan state. Для текущего публичного домена `pkhco.ru` рабочим источником DNS должна быть Cloudflare zone.
 
 Проверка SSH-доступа к первому узлу:
 
@@ -246,7 +282,9 @@ kubectl get --raw='/readyz?verbose'
 make deploy-vault ENV=vm-dev
 ```
 
-Скрипт устанавливает `local-path` storage class, затем Terraform-слоем `terraform/platform` устанавливает Vault Helm release и service account для Kubernetes auth.
+Скрипт устанавливает `local-path` storage class, затем Terraform-слоем `terraform/platform` устанавливает Vault Helm release, service account для Kubernetes auth и ingress `vault.<APP_DOMAIN>`.
+
+В `vm-dev` Vault запускается в 3 replica. Если в стенде только 2 worker-узла, третья replica допускается на control-plane через toleration `node-role.kubernetes.io/control-plane:NoSchedule`. Для production-режима предпочтительнее добавить третий worker-узел и убрать необходимость размещать Vault на control-plane.
 
 Проверка:
 
@@ -280,12 +318,34 @@ make vault-configure ENV=vm-dev
 kubectl -n security get pods
 kubectl -n security exec vault-0 -- vault status
 kubectl -n security get secret vault-auth-token
+kubectl -n security get ingress
 ```
+
+Получить token для входа в Vault UI:
+
+```bash
+make vault-admin-token ENV=vm-dev
+```
+
+Команда создаёт короткоживущий token с policy `root`, TTL по умолчанию `24h`, сохраняет JSON в `.artifacts/vm-dev/vault-admin-token.json` и печатает сам token отдельной строкой. Изменить TTL:
+
+```bash
+VAULT_ADMIN_TOKEN_TTL=2h make vault-admin-token ENV=vm-dev
+```
+
+Если нужно вывести bootstrap root token из локального init-файла:
+
+```bash
+make vault-token ENV=vm-dev
+```
+
+Root token использовать только для bootstrap/debug. Для регулярного входа в UI предпочтительнее создавать короткоживущий admin token.
 
 Ожидаемый результат:
 
 - `vault-0`, `vault-1`, `vault-2` не sealed;
 - Vault injector запущен;
+- ingress `vault.pkhco.ru` получил TLS secret от production Let's Encrypt;
 - Terraform `terraform/vault` применился без ошибок.
 
 ## 9. Развертывание платформенных сервисов
@@ -297,12 +357,20 @@ make deploy-platform ENV=vm-dev
 По умолчанию cert-manager создаёт локальный CA issuer `test-selfsigned`. Это правильный режим для приватного `mdp`. Для публичного домена предварительно настройте DNS, затем задайте:
 
 ```bash
-export APP_DOMAIN=example.com
-export TLS_CLUSTER_ISSUER=letsencrypt-staging
+export APP_DOMAIN=pkhco.ru
+export TLS_CLUSTER_ISSUER=letsencrypt-prod
 export LETSENCRYPT_EMAIL=admin@example.com
+export K8S_ADMIN_ENABLED=true
+export K8S_ADMIN_BASIC_AUTH_HTPASSWD='admin:<bcrypt-hash-from-htpasswd>'
 ```
 
-После проверки staging-issuer можно перейти на `TLS_CLUSTER_ISSUER=letsencrypt-prod`.
+`K8S_ADMIN_BASIC_AUTH_HTPASSWD` создаётся командой:
+
+```bash
+htpasswd -nbB admin '<strong-password>'
+```
+
+Staging Let's Encrypt в deployment-kit не используется: публичный профиль сразу выпускает production-сертификаты.
 
 Скрипт устанавливает:
 
@@ -312,6 +380,8 @@ export LETSENCRYPT_EMAIL=admin@example.com
 - cert-manager и ClusterIssuer;
 - metrics-server;
 - kube-prometheus-stack;
+- Grafana ingress `grafana.<APP_DOMAIN>`;
+- Headlamp ingress `k8s-admin.<APP_DOMAIN>`, если `K8S_ADMIN_ENABLED=true`; доступ закрыт basic auth на ingress-nginx;
 - prometheus-blackbox-exporter;
 - Grafana dashboards, Prometheus alert rules и platform probes из `kubernetes/observability`;
 - Loki;
@@ -342,18 +412,40 @@ kubectl top nodes
 kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80
 ```
 
-В Grafana должна появиться папка `Deployment Kit` с dashboards по кластеру, приложениям, endpoint'ам и платформенным компонентам.
+В Grafana должна появиться папка `Deployment Kit` с dashboards по кластеру, приложениям, endpoint'ам, Redis/PostgreSQL и платформенным компонентам.
 
 GitLab probes добавляются командой `make deploy-gitlab`, а app/datastore probes — командой `make deploy-apps`, чтобы до установки этих компонентов мониторинг не создавал ложные endpoint alerts.
+
+Доступ в Headlamp (`https://k8s-admin.<APP_DOMAIN>`) состоит из двух уровней:
+
+1. basic auth на ingress-nginx, логин/пароль берутся из `K8S_ADMIN_BASIC_AUTH_HTPASSWD`;
+2. Kubernetes token на странице входа Headlamp.
+
+Получить token для текущей установки:
+
+```bash
+kubectl --kubeconfig .artifacts/vm-dev/admin.conf -n k8s-admin create token headlamp
+```
+
+Если нужно проверить ServiceAccount:
+
+```bash
+kubectl --kubeconfig .artifacts/vm-dev/admin.conf -n k8s-admin get sa
+kubectl --kubeconfig .artifacts/vm-dev/admin.conf get clusterrolebinding | grep headlamp
+```
 
 ## 10. Развертывание GitLab
 
 ```bash
+export APP_DOMAIN=pkhco.ru
+export TLS_CLUSTER_ISSUER=letsencrypt-prod
 make deploy-gitlab ENV=vm-dev
 ```
 
-GitLab разворачивается в namespace `devops`, использует ingress `gitlab.mdp` и registry `registry.mdp`. Root password берётся из `GITLAB_ROOT_PASSWORD` или из уже существующего Kubernetes Secret.
-После успешного Helm rollout скрипт добавляет blackbox probes для `gitlab.mdp` и `registry.mdp`.
+GitLab разворачивается в namespace `devops`, использует ingress `gitlab.<APP_DOMAIN>` и registry `registry.<APP_DOMAIN>`. Для публичного стенда `pkhco.ru` это `gitlab.pkhco.ru` и `registry.pkhco.ru`. Root password берётся из `GITLAB_ROOT_PASSWORD` или из уже существующего Kubernetes Secret.
+После успешного Helm rollout скрипт добавляет blackbox probes для `gitlab.<APP_DOMAIN>` и `registry.<APP_DOMAIN>`.
+
+GitLab Runner запускается в кластере и регистрируется через внутренний Service `gitlab-webservice-default.devops.svc.cluster.local:8080`. Это важно для стартового режима с приватным доменом `mdp` и self-signed TLS: runner не зависит от внешнего DNS `gitlab.pkhco.ru`, а job clone URL переписывается на тот же внутренний endpoint.
 
 Скрипт не пересоздаёт `gitlab-root-password`, если secret уже существует. Для осознанной ротации используйте `ROTATE_GITLAB_ROOT_PASSWORD=true` и заранее проверьте процедуру смены root password в GitLab.
 
@@ -378,11 +470,11 @@ echo
 
 ```bash
 INGRESS_IP=$(jq -r '.ingress_external_ip.value' .artifacts/vm-dev/terraform-outputs.json)
-curl -kI --resolve "gitlab.mdp:443:${INGRESS_IP}" https://gitlab.mdp/users/sign_in
-curl -kI --resolve "registry.mdp:443:${INGRESS_IP}" https://registry.mdp/v2/
+curl -kI --resolve "gitlab.pkhco.ru:443:${INGRESS_IP}" https://gitlab.pkhco.ru/users/sign_in
+curl -kI --resolve "registry.pkhco.ru:443:${INGRESS_IP}" https://registry.pkhco.ru/v2/
 ```
 
-Для доступа из браузера добавьте в локальный DNS или `/etc/hosts`:
+Для публичного режима эти записи создаёт `make edge-apply` в Cloudflare. Для приватного `mdp` fallback можно добавить в локальный DNS или `/etc/hosts`:
 
 ```text
 <INGRESS_IP> app.mdp gateway.mdp api.mdp gitlab.mdp registry.mdp minio.mdp
@@ -393,25 +485,78 @@ curl -kI --resolve "registry.mdp:443:${INGRESS_IP}" https://registry.mdp/v2/
 Прикладные Helm charts ожидают образы:
 
 ```text
-registry.mdp/platform/api:0.1.0
-registry.mdp/platform/gateway:0.1.0
-registry.mdp/platform/frontend:0.1.0
+registry.pkhco.ru/platform/api:0.2.0
+registry.pkhco.ru/platform/gateway:0.2.0
+registry.pkhco.ru/platform/frontend:0.2.0
 ```
 
-До финального прохода с собственными demo-образами есть два варианта:
+Deployment-kit поставляет минимальные demo-заглушки в каталоге `apps/`:
 
-1. Собрать и загрузить реальные образы в GitLab Container Registry.
-2. Временно переопределить `image.repository` и `image.tag` в `kubernetes/apps/*/values-*.yaml` на уже существующие тестовые образы.
+- `api` создаёт, читает и обновляет карточки лидов по маршрутам `/leads` и `/leads/:id`;
+- `gateway` проксирует маршруты `/leads`, `/entities` и `/test-runs` в API;
+- `frontend` отдаёт CRM-доску лидов, таблицу, форму редактирования и вкладку `Админка` с результатами тестов.
 
-Если образы отсутствуют, `make deploy-apps` дойдёт до rollout и завершится ошибкой `ImagePullBackOff`.
+Проверить заглушки локально без Kubernetes:
+
+```bash
+make test-stubs
+```
+
+Собрать образы:
+
+```bash
+make build-stub-images
+```
+
+Опубликовать образы в GitLab Container Registry:
+
+```bash
+make prepare-gitlab-registry-projects ENV=vm-dev
+make docker-registry-login ENV=vm-dev
+PUSH_IMAGES=true make build-stub-images
+```
+
+При публикации локально с macOS скрипт использует `docker buildx build --platform linux/amd64 --push`. Это важно: VM в Yandex Cloud используют `linux/amd64`, а образ, случайно собранный как ARM64, приводит к `ImagePullBackOff` с ошибкой `no match for platform in manifest`.
+
+`make prepare-gitlab-registry-projects` создаёт проекты `platform/api`, `platform/gateway` и `platform/frontend`. Без этих проектов push в `registry.pkhco.ru/platform/<app>` завершается `insufficient_scope` или `repository does not exist`.
+
+Если используется другой registry или tag:
+
+```bash
+IMAGE_REGISTRY=registry.pkhco.ru APP_IMAGE_TAG=0.2.0 PUSH_IMAGES=true make build-stub-images
+APP_IMAGE_TAG=0.2.0 make deploy-apps ENV=vm-dev
+```
+
+Если образы отсутствуют в registry, `make deploy-apps` дойдёт до rollout и завершится ошибкой `ImagePullBackOff`.
 
 Пример проверки registry login после запуска GitLab:
 
 ```bash
-docker login registry.mdp
+make docker-registry-login ENV=vm-dev
 ```
 
-При self-signed TLS может потребоваться добавить CA в Docker/containerd trust store или временно настроить registry как insecure registry только для demo-стенда.
+Команда `make docker-registry-login` берёт пароль из `devops/gitlab-root-password` и выполняет login в `registry.<APP_DOMAIN>`. Для публичного `pkhco.ru` с production Let's Encrypt `REGISTRY_TRUST_MODE=none`, дополнительных CA/insecure настроек Docker не требуется.
+
+Для приватного self-signed режима команда может дополнительно автоматизировать Docker trust:
+
+1. добавляет `registry.<APP_DOMAIN>`, `registry.<APP_DOMAIN>:443`, `gitlab.<APP_DOMAIN>` и `gitlab.<APP_DOMAIN>:443` в `insecure-registries` Docker daemon config, если задано `REGISTRY_TRUST_MODE=insecure`;
+2. делает backup исходного Docker daemon config рядом с файлом настроек;
+3. перезапускает Docker Desktop на macOS, чтобы daemon перечитал настройки;
+4. выполняет `docker login registry.<APP_DOMAIN>` пользователем `root`, беря пароль из Kubernetes secret `devops/gitlab-root-password`.
+
+Для ручного запуска только настройки Docker:
+
+```bash
+make configure-docker-insecure-registry ENV=vm-dev
+```
+
+Если пароль root не должен использоваться для registry, задайте `REGISTRY_USER` и `REGISTRY_PASSWORD`. Для публичного профиля используйте `TLS_CLUSTER_ISSUER=letsencrypt-prod` и `REGISTRY_TRUST_MODE=none`.
+
+Если нужно проверить более строгий CA-based режим без insecure registry:
+
+```bash
+REGISTRY_TRUST_MODE=ca make docker-registry-login ENV=vm-dev
+```
 
 ## 12. Развертывание приложений
 
@@ -419,7 +564,7 @@ docker login registry.mdp
 make deploy-apps ENV=vm-dev
 ```
 
-Скрипт создаёт или обновляет registry secret, создаёт PostgreSQL secret только если его ещё нет, устанавливает PostgreSQL, Redis, API, gateway, frontend, RBAC, NetworkPolicy и backup-манифесты.
+Скрипт создаёт или обновляет registry secret, создаёт PostgreSQL secret только если его ещё нет, устанавливает PostgreSQL, Redis, API, gateway, frontend, RBAC, NetworkPolicy и backup-манифесты. Если `REGISTRY_PASSWORD` не задан, `gitlab-registry` secret автоматически собирается из `devops/gitlab-root-password` с пользователем `root`.
 После успешного rollout скрипт добавляет blackbox probes для внутренних health endpoint'ов, ingress endpoint'ов, PostgreSQL и Redis.
 
 PostgreSQL secret не пересоздаётся при повторном запуске, чтобы не разойтись с паролем уже инициализированной БД. Для явной ротации задайте `ROTATE_POSTGRES_SECRET=true`, но перед этим подготовьте процедуру смены пароля в PostgreSQL и Vault secret overrides.
@@ -439,13 +584,13 @@ kubectl -n app rollout status deployment/frontend --timeout=300s
 
 ```bash
 INGRESS_IP=$(jq -r '.ingress_external_ip.value' .artifacts/vm-dev/terraform-outputs.json)
-curl -kfsS --resolve "app.mdp:443:${INGRESS_IP}" https://app.mdp/health
+curl -kfsS --resolve "app.pkhco.ru:443:${INGRESS_IP}" https://app.pkhco.ru/health
 ```
 
 Проверка gateway:
 
 ```bash
-curl -kfsS --resolve "gateway.mdp:443:${INGRESS_IP}" https://gateway.mdp/health
+curl -kfsS --resolve "gateway.pkhco.ru:443:${INGRESS_IP}" https://gateway.pkhco.ru/health
 ```
 
 ## 13. Полный набор тестов
@@ -461,6 +606,21 @@ make test-storage ENV=vm-dev
 make test-gitlab ENV=vm-dev
 make test-resilience ENV=vm-dev
 ```
+
+В консоли выводятся только статусы верхнеуровневых проверок. Полные логи, JSON и HTML-отчёт сохраняются в:
+
+```text
+.artifacts/vm-dev/test-results/
+```
+
+Последние отчёты:
+
+```text
+.artifacts/vm-dev/test-results/latest.json
+.artifacts/vm-dev/test-results/latest.html
+```
+
+Если ingress gateway доступен, результат теста дополнительно публикуется в приложение и отображается во frontend на вкладке `Админка`.
 
 Короткий регулярный набор:
 
@@ -510,6 +670,8 @@ make test-security ENV=vm-dev
 - действие `NetworkPolicy`;
 - ожидаемые ограничения RBAC для прикладных service accounts.
 
+Если тест сразу сообщает `Обнаружен kube-flannel без NetworkPolicy controller`, текущий live-кластер собран на Flannel. Для прохождения security baseline нужен CNI с policy enforcement, например дефолтный Calico из текущей версии deployment-kit. Для уже поднятого Flannel-кластера безопасный путь — `kubeadm-reset` и повторный bootstrap; live-миграцию CNI выполнять только отдельным контролируемым окном.
+
 ### Integration
 
 ```bash
@@ -520,6 +682,7 @@ make test-integration ENV=vm-dev
 
 - готовность платформенных компонентов;
 - полный прикладной flow;
+- create/read/update карточек лидов;
 - работу Vault Agent Injector и доставку секрета в Pod.
 
 ### Storage
@@ -564,12 +727,39 @@ make test-load ENV=vm-dev
 
 ## 15. Запуск через GitLab CI
 
-Pipeline описан в `ci/templates/infra-pipeline.yml`.
+Корневой `.gitlab-ci.yml` по умолчанию запускает app pipeline для demo-заглушек: build -> scan -> deploy -> smoke. Инфраструктурный pipeline подключается только при `RUN_INFRA_PIPELINE=true`, чтобы обычный push приложения не пытался управлять Yandex Cloud.
+
+Автоматически создать registry-проекты `platform/api`, `platform/gateway`, `platform/frontend`, GitLab project `platform/deployment-kit`, записать CI variables и запушить текущую ветку:
+
+```bash
+make bootstrap-gitlab-app-ci ENV=vm-dev
+```
+
+Скрипт записывает в проект:
+
+```text
+APP_DOMAIN
+APP_NAMESPACE
+TLS_CLUSTER_ISSUER
+IMAGE_REGISTRY
+REGISTRY_SERVER
+REGISTRY_USER
+REGISTRY_PASSWORD
+KUBECONFIG_B64
+RUN_INFRA_PIPELINE=false
+```
+
+Важно: `git push` отправляет только уже созданные commits. Если в рабочем дереве есть незакоммиченные изменения, скрипт предупредит об этом.
+
+По умолчанию `make bootstrap-gitlab-app-ci` кодирует текущий `.artifacts/<env>/admin.conf` в `KUBECONFIG_B64`. Для более строгой модели заранее передайте `KUBECONFIG_B64` от отдельного deployer kubeconfig с namespace-scoped правами.
+
+Инфраструктурный pipeline описан в `ci/templates/infra-pipeline.yml`.
 
 Обязательные CI variables:
 
 ```text
 ENV=vm-dev
+RUN_INFRA_PIPELINE=true
 TF_VAR_yc_token
 GRAFANA_ADMIN_PASSWORD
 GITLAB_ROOT_PASSWORD
@@ -632,6 +822,12 @@ make deploy-apps ENV=vm-dev
 
 ## 17. Удаление инфраструктуры
 
+Сначала удалите edge-слой, пока доступны старые Terraform outputs с IP ingress NLB:
+
+```bash
+CONFIRM_EDGE_DESTROY=vm-dev make edge-destroy ENV=vm-dev
+```
+
 Полное удаление Yandex Cloud ресурсов:
 
 ```bash
@@ -684,6 +880,22 @@ kubectl -n app describe pod <pod-name>
 kubectl -n app get secret gitlab-registry -o yaml
 ```
 
+Если Pod получает `401 Unauthorized` при обращении к `https://gitlab.pkhco.ru/jwt/auth`, обновите registry secret и перезапустите rollout:
+
+```bash
+make prepare-gitlab-registry-projects ENV=vm-dev
+make deploy-apps ENV=vm-dev
+kubectl -n app rollout restart deployment/api deployment/gateway deployment/frontend
+```
+
+Если Pod получает `no match for platform in manifest`, перезапушьте образы под `linux/amd64`:
+
+```bash
+make docker-registry-login ENV=vm-dev
+IMAGE_PLATFORM=linux/amd64 PUSH_IMAGES=true make build-stub-images
+kubectl --kubeconfig .artifacts/vm-dev/admin.conf -n app rollout restart deployment/api deployment/gateway deployment/frontend
+```
+
 Проверить Vault injection:
 
 ```bash
@@ -709,6 +921,6 @@ kubectl -n devops logs <pod-name>
 - `make kubeadm-bootstrap` создал HA kubeadm-кластер, все узлы `Ready`;
 - Vault initialized/unsealed и `make vault-configure` завершился успешно;
 - platform services готовы;
-- GitLab доступен через `gitlab.mdp`, registry отвечает на `/v2/`;
+- GitLab доступен через `gitlab.pkhco.ru`, registry отвечает на `/v2/`;
 - приложения успешно развернуты и отвечают через ingress;
 - `make test-smoke`, `make test-network`, `make test-security`, `make test-integration`, `make test-storage`, `make test-gitlab`, `make test-resilience` завершились без ошибок.

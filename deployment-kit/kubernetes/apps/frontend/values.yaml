@@ -1,7 +1,7 @@
 replicaCount: 2
 image:
-  repository: registry.mdp/platform/frontend
-  tag: "0.1.0"
+  repository: registry.pkhco.ru/platform/frontend
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
@@ -73,8 +73,8 @@ networkPolicy:
 ingress:
   enabled: true
   className: nginx
-  clusterIssuer: test-selfsigned
-  host: app.mdp
+  clusterIssuer: letsencrypt-prod
+  host: app.pkhco.ru
   tlsSecretName: frontend-tls
 config:
   ENVIRONMENT: dev

@@ -12,12 +12,19 @@ GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
 GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
 ROTATE_GITLAB_ROOT_PASSWORD=${ROTATE_GITLAB_ROOT_PASSWORD:-false}
-APP_DOMAIN=${APP_DOMAIN:-mdp}
-TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-test-selfsigned}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
 
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
+}
+
+validate_tls_issuer() {
+  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-staging" ]]; then
+    echo "letsencrypt-staging запрещён. Используйте letsencrypt-prod для публичного домена или test-selfsigned для приватного mdp." >&2
+    exit 1
+  fi
 }
 
 generate_demo_password() {
@@ -75,10 +82,10 @@ resolve_ingress_ip() {
 render_gitlab_probes() {
   local output
   output=$(mktemp)
-  # Probes хранят mdp как безопасный дефолт, а при deploy подставляется текущий APP_DOMAIN.
+  # Проверки endpoint'ов хранят публичный профиль pkhco.ru, а при deploy подставляется текущий APP_DOMAIN.
   sed \
-    -e "s|gitlab\\.mdp|gitlab.${APP_DOMAIN}|g" \
-    -e "s|registry\\.mdp|registry.${APP_DOMAIN}|g" \
+    -e "s|gitlab\\.pkhco.ru|gitlab.${APP_DOMAIN}|g" \
+    -e "s|registry\\.pkhco.ru|registry.${APP_DOMAIN}|g" \
     kubernetes/observability/probes/gitlab-probes.yaml > "$output"
   echo "$output"
 }
@@ -112,7 +119,7 @@ ensure_gitlab_root_secret() {
       echo "Secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET} уже существует; повторное создание пропущено. Для явной ротации задайте ROTATE_GITLAB_ROOT_PASSWORD=true."
       return
     fi
-    # Root password GitLab нельзя silently пересоздавать: это может разойтись с состоянием БД.
+    # Root password GitLab нельзя неявно пересоздавать: это может разойтись с состоянием БД.
     kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" >/dev/null
   fi
 
@@ -122,6 +129,7 @@ ensure_gitlab_root_secret() {
 }
 
 require_file "$KUBECONFIG"
+validate_tls_issuer
 require_file kubernetes/platform/gitlab/values.yaml
 require_file kubernetes/observability/probes/gitlab-probes.yaml
 

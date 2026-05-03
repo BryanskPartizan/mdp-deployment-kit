@@ -7,6 +7,12 @@ source "${SCRIPT_DIR}/../lib/k8s-probe.sh"
 
 require_command kubectl
 
+if kubectl get namespace kube-flannel >/dev/null 2>&1 && \
+  ! kubectl get pods -A -o name | grep -E 'calico|cilium|kube-router|canal' >/dev/null 2>&1; then
+  echo "Обнаружен kube-flannel без NetworkPolicy controller. Flannel не применяет Kubernetes NetworkPolicy; пересоберите кластер с Calico или другим CNI с policy enforcement." >&2
+  exit 1
+fi
+
 kubectl -n app get networkpolicy \
   default-deny \
   allow-frontend-to-gateway \

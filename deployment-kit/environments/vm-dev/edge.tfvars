@@ -1,14 +1,21 @@
-yc_cloud_id  = "REPLACE_WITH_YC_CLOUD_ID"
-yc_folder_id = "REPLACE_WITH_YC_FOLDER_ID"
+yc_cloud_id  = "b1g5h2eidfj5nvj9m691"
+yc_folder_id = "b1gsetoo8rdt9uhavi9d"
 yc_zone      = "ru-central1-a"
 
-cluster_name = "demo-k8s-dev"
+cluster_name = "mdp-k8s-dev"
 
-# Приватный стартовый домен стенда. Для него используется self-signed TLS и локальные hosts-записи.
-domain_name = "mdp"
-dns_mode    = "hosts"
+# Публичный домен управляется в Cloudflare. Включаем DNS only записи на внешний IP ingress NLB.
+domain_name        = "pkhco.ru"
+dns_provider       = "cloudflare"
+dns_mode           = "public"
+cloudflare_proxied = false
+create_dns_zone    = false
+cdn_enabled        = false
 
-# Для реального публичного домена поменяйте domain_name, включите dns_mode="public",
-# create_dns_zone=true и при необходимости cdn_enabled=true.
-create_dns_zone = false
-cdn_enabled     = false
+# Дополнительные публичные entrypoints платформы.
+extra_ingress_hostnames = {
+  grafana   = "grafana.pkhco.ru"
+  kas       = "kas.pkhco.ru"
+  k8s_admin = "k8s-admin.pkhco.ru"
+  vault     = "vault.pkhco.ru"
+}

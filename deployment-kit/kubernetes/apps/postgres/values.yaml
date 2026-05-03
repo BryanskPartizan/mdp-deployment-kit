@@ -11,5 +11,13 @@ primary:
     enabled: true
     storageClass: local-path
     size: 8Gi
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      deployment-kit/component: datastore
+      deployment-kit/datastore: postgres
 commonLabels:
   app.kubernetes.io/name: postgres

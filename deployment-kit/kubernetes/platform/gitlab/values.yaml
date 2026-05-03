@@ -6,17 +6,17 @@ global:
     https: true
     externalIP: "127.0.0.1"
     gitlab:
-      name: gitlab.mdp
+      name: gitlab.pkhco.ru
     registry:
-      name: registry.mdp
+      name: registry.pkhco.ru
     minio:
-      name: minio.mdp
+      name: minio.pkhco.ru
   ingress:
     enabled: true
     class: nginx
     configureCertmanager: false
     annotations:
-      cert-manager.io/cluster-issuer: test-selfsigned
+      cert-manager.io/cluster-issuer: letsencrypt-prod
     tls:
       enabled: true
   initialRootPassword:
@@ -45,6 +45,8 @@ prometheus:
 
 gitlab-runner:
   install: true
+  # Runner регистрируется через внутренний Service GitLab, чтобы не зависеть от DNS приватного домена mdp внутри кластера.
+  gitlabUrl: http://gitlab-webservice-default.devops.svc.cluster.local:8080
   rbac:
     create: true
     clusterWideAccess: false
@@ -81,7 +83,10 @@ gitlab-runner:
     tags: "deployment-kit,kubernetes"
     config: |
       [[runners]]
+        clone_url = "http://gitlab-webservice-default.devops.svc.cluster.local:8080"
         executor = "kubernetes"
+        # Значение согласовано с concurrent=2, чтобы runner не упирался в один long-polling запрос.
+        request_concurrency = 2
         [runners.kubernetes]
           image = "ubuntu:22.04"
           namespace = "ci"

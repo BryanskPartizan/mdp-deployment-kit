@@ -7,18 +7,20 @@
 - `hashicorp/kubernetes`: `~> 2.38.0`
 - `hashicorp/helm`: `~> 2.17.0`
 - `hashicorp/vault`: `~> 5.9.0`
+- `cloudflare/cloudflare`: `~> 4.0`
 
 ## Helm charts
 - GitLab: `gitlab/gitlab` `9.11.1`
 - GitLab Runner: bundled subchart declared by GitLab chart `9.11.1` (`gitlab/gitlab-runner` `0.87.0`, app `18.10.0`)
 - Vault: `hashicorp/vault` `0.32.0`
 - ingress-nginx: `ingress-nginx/ingress-nginx` `4.15.1`
-- cert-manager: `v1.20.2`
+- cert-manager: `v1.19.5`
 - metrics-server: `metrics-server/metrics-server` `3.13.0`
 - kube-prometheus-stack: `prometheus-community/kube-prometheus-stack` `84.3.0`
 - prometheus-blackbox-exporter: `prometheus-community/prometheus-blackbox-exporter` `11.9.1`
 - Loki: `grafana/loki` `7.0.0`
 - Alloy: `grafana/alloy` `1.8.0` (`appVersion` `v1.16.0`)
+- Headlamp: `headlamp/headlamp` `0.41.0`
 - PostgreSQL: `bitnami/postgresql` `18.6.2`
 - Redis: `bitnami/redis` `25.4.1`
 

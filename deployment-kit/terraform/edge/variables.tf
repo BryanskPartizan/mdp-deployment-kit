@@ -21,6 +21,19 @@ variable "yc_zone" {
   default     = "ru-central1-a"
 }
 
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token для управления DNS-записями. Можно передать через TF_VAR_cloudflare_api_token."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID публичного домена, если dns_provider=cloudflare."
+  type        = string
+  default     = null
+}
+
 variable "cluster_name" {
   description = "Логическое имя кластера, используется в именах DNS/CDN-ресурсов."
   type        = string
@@ -51,6 +64,23 @@ variable "dns_mode" {
     condition     = contains(["hosts", "private", "public"], var.dns_mode)
     error_message = "dns_mode должен быть одним из: hosts, private, public."
   }
+}
+
+variable "dns_provider" {
+  description = "Провайдер DNS-записей: hosts только генерирует hosts-файл, yandex управляет Yandex Cloud DNS, cloudflare управляет Cloudflare DNS."
+  type        = string
+  default     = "yandex"
+
+  validation {
+    condition     = contains(["hosts", "yandex", "cloudflare"], var.dns_provider)
+    error_message = "dns_provider должен быть одним из: hosts, yandex, cloudflare."
+  }
+}
+
+variable "cloudflare_proxied" {
+  description = "Включать Cloudflare proxy. Для GitLab/registry должен оставаться false: прямой DNS only на ingress IP."
+  type        = bool
+  default     = false
 }
 
 variable "create_dns_zone" {

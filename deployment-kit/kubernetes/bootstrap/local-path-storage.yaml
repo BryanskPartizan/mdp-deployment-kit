@@ -18,6 +18,10 @@ rules:
     resources: ["nodes", "persistentvolumeclaims", "configmaps", "pods", "pods/log"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
+    resources: ["pods"]
+    # local-path-provisioner создаёт helper pods для mkdir/rm локальных каталогов PV.
+    verbs: ["create", "delete"]
+  - apiGroups: [""]
     resources: ["persistentvolumes"]
     verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
   - apiGroups: [""]

@@ -5,7 +5,7 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 TERRAFORM_OUTPUTS=${ARTIFACTS_DIR}/terraform-outputs.json
-APP_DOMAIN=${APP_DOMAIN:-mdp}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
 FRONTEND_HOST=${SMOKE_FRONTEND_HOST:-app.${APP_DOMAIN}}
 GATEWAY_HOST=${SMOKE_GATEWAY_HOST:-gateway.${APP_DOMAIN}}
 

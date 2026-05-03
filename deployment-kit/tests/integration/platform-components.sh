@@ -29,3 +29,4 @@ kubectl -n observability get servicemonitor -l deployment-kit/component=alloy
 kubectl get clusterrole deployment-kit-alloy
 kubectl -n observability get prometheusrule deployment-kit-platform-alerts
 kubectl -n observability get configmap deployment-kit-grafana-dashboards
+kubectl -n observability get configmap deployment-kit-grafana-dashboards -o jsonpath='{.data.datastores\.json}' | grep -q "Redis and PostgreSQL"

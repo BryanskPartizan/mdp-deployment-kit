@@ -233,6 +233,128 @@ data:
         }
       ]
     }
+  datastores.json: |-
+    {
+      "uid": "deployment-kit-datastores",
+      "title": "Deployment Kit / Redis and PostgreSQL",
+      "tags": ["deployment-kit", "datastores", "redis", "postgresql"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-6h", "to": "now"},
+      "panels": [
+        {
+          "type": "stat",
+          "title": "PostgreSQL ready replicas",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "targets": [{"refId": "A", "expr": "max(kube_statefulset_status_replicas_ready{namespace=\"app\",statefulset=\"postgres-postgresql\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "Redis ready replicas",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "targets": [{"refId": "A", "expr": "max(kube_statefulset_status_replicas_ready{namespace=\"app\",statefulset=\"redis-master\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "PostgreSQL TCP probe",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "targets": [{"refId": "A", "expr": "min(probe_success{component=\"postgres\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "Redis TCP probe",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "targets": [{"refId": "A", "expr": "min(probe_success{component=\"redis\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "PostgreSQL connections",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "targets": [{"refId": "A", "expr": "sum by (state) (pg_stat_activity_count{namespace=\"app\"})", "legendFormat": "{{ state }}"}],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "PostgreSQL transactions",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "targets": [
+            {"refId": "A", "expr": "sum by (datname) (rate(pg_stat_database_xact_commit{namespace=\"app\"}[5m]))", "legendFormat": "{{ datname }} commit"},
+            {"refId": "B", "expr": "sum by (datname) (rate(pg_stat_database_xact_rollback{namespace=\"app\"}[5m]))", "legendFormat": "{{ datname }} rollback"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Redis clients",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "targets": [{"refId": "A", "expr": "redis_connected_clients{namespace=\"app\"}", "legendFormat": "{{ pod }}"}],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Redis commands",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "targets": [{"refId": "A", "expr": "rate(redis_commands_processed_total{namespace=\"app\"}[5m])", "legendFormat": "{{ pod }}"}],
+          "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Datastore CPU",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+          "targets": [{"refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"app\",pod=~\"postgres-postgresql-.*|redis-master-.*\",container!=\"\",image!=\"\"}[5m]))", "legendFormat": "{{ pod }}"}],
+          "fieldConfig": {"defaults": {"unit": "cores", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Datastore memory",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+          "targets": [
+            {"refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"app\",pod=~\"postgres-postgresql-.*|redis-master-.*\",container!=\"\",image!=\"\"})", "legendFormat": "{{ pod }}"},
+            {"refId": "B", "expr": "redis_memory_used_bytes{namespace=\"app\"}", "legendFormat": "{{ pod }} redis used"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Datastore PVC free space",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+          "targets": [{"refId": "A", "expr": "100 * kubelet_volume_stats_available_bytes{namespace=\"app\",persistentvolumeclaim=~\"data-postgres-postgresql-0|redis-data-redis-master-0\"} / kubelet_volume_stats_capacity_bytes{namespace=\"app\",persistentvolumeclaim=~\"data-postgres-postgresql-0|redis-data-redis-master-0\"}", "legendFormat": "{{ persistentvolumeclaim }}"}],
+          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Datastore probe latency",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+          "targets": [{"refId": "A", "expr": "probe_duration_seconds{component=~\"postgres|redis\"}", "legendFormat": "{{ endpoint }}"}],
+          "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "logs",
+          "title": "Datastore errors",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 36},
+          "targets": [{"refId": "A", "expr": "{namespace=\"app\", pod=~\"postgres-postgresql-.*|redis-master-.*\"} |~ \"(?i)(error|failed|panic|fatal|timeout)\""}]
+        }
+      ]
+    }
   platform.json: |-
     {
       "uid": "deployment-kit-platform",

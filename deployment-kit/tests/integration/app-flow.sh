@@ -35,3 +35,13 @@ expect_success "ingress namespace sees frontend /health" \
   ingress-nginx \
   "dk-test=integration" \
   "curl -fsS --connect-timeout 5 http://frontend.app.svc.cluster.local:8080/health"
+
+expect_success "gateway creates and reads demo lead" \
+  app \
+  "app.kubernetes.io/name=gateway,dk-test=integration" \
+  "created=\$(curl -fsS -H 'content-type: application/json' -d '{\"name\":\"Gateway Test Lead\",\"company\":\"Deployment Kit\",\"status\":\"qualified\",\"budget\":50000}' http://gateway.app.svc.cluster.local:8080/leads); id=\$(printf '%s' \"\$created\" | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p'); test -n \"\$id\"; curl -fsS http://gateway.app.svc.cluster.local:8080/leads/\"\$id\" | grep -q 'Gateway Test Lead'"
+
+expect_success "frontend proxy creates and reads demo lead" \
+  ingress-nginx \
+  "dk-test=integration" \
+  "created=\$(curl -fsS -H 'content-type: application/json' -d '{\"name\":\"Frontend Test Lead\",\"company\":\"Deployment Kit\",\"status\":\"contacted\",\"budget\":25000}' http://frontend.app.svc.cluster.local:8080/leads); id=\$(printf '%s' \"\$created\" | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p'); test -n \"\$id\"; curl -fsS http://frontend.app.svc.cluster.local:8080/leads/\"\$id\" | grep -q 'Frontend Test Lead'"

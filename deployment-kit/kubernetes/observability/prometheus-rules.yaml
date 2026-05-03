@@ -120,3 +120,37 @@ spec:
           annotations:
             summary: "PVC free space is low"
             description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less than 15% free space."
+    - name: deployment-kit.datastores
+      rules:
+        - alert: DeploymentKitPostgresUnavailable
+          expr: kube_statefulset_status_replicas_ready{namespace="app",statefulset="postgres-postgresql"} < 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL is unavailable"
+            description: "StatefulSet app/postgres-postgresql has no ready replicas."
+        - alert: DeploymentKitRedisUnavailable
+          expr: kube_statefulset_status_replicas_ready{namespace="app",statefulset="redis-master"} < 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis is unavailable"
+            description: "StatefulSet app/redis-master has no ready replicas."
+        - alert: DeploymentKitDatastoreProbeDown
+          expr: probe_success{component=~"postgres|redis"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Datastore TCP probe failed"
+            description: "Datastore probe {{ $labels.endpoint }} has failed for more than 2 minutes."
+        - alert: DeploymentKitDatastorePVCFillingUp
+          expr: kubelet_volume_stats_capacity_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} > 0 and kubelet_volume_stats_available_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} / kubelet_volume_stats_capacity_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} < 0.2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Datastore PVC free space is low"
+            description: "Datastore PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less than 20% free space."

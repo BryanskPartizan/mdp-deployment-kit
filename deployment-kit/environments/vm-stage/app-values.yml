@@ -1,9 +1,9 @@
 gateway:
-  host: gateway.mdp
+  host: gateway.pkhco.ru
 api:
   replicas: 2
 frontend:
-  host: app.mdp
+  host: app.pkhco.ru
 postgres:
   auth:
     database: appdb

@@ -3,5 +3,27 @@ workflow:
   rules:
     - when: always
 
+stages:
+  - validate
+  - build
+  - scan
+  - plan
+  - apply
+  - edge
+  - bootstrap
+  - vault
+  - platform
+  - gitlab
+  - apps
+  - smoke
+  - network
+  - security
+  - integration
+  - resilience
+  - cleanup
+
 include:
   - local: ci/templates/infra-pipeline.yml
+    rules:
+      - if: '$RUN_INFRA_PIPELINE == "true"'
+  - local: ci/templates/stub-apps-pipeline.yml

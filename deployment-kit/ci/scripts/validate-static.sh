@@ -7,6 +7,13 @@ terraform fmt -check -recursive terraform
 # Проверяем синтаксис shell-скриптов, чтобы CI падал до запуска долгих стадий.
 find ci/scripts tests -name '*.sh' -print0 | xargs -0 bash -n
 
+# Проверяем синтаксис JS-заглушек, если локально доступен Node.js.
+if command -v node >/dev/null 2>&1; then
+  find apps -name '*.js' -print0 | xargs -0 -n1 node --check
+else
+  echo "node не найден, проверка JS-заглушек пропущена."
+fi
+
 # Приватный домен стенда по умолчанию должен оставаться mdp; старые *.local шаблоны не должны возвращаться.
 if command -v rg >/dev/null 2>&1; then
   if rg -n "lab\\.local|stage\\.local|aws-stage\\.local" README.md docs kubernetes ci tests environments terraform ansible; then
@@ -61,7 +68,7 @@ fi
 # Проверяем platform charts при доступных Helm repositories/cache.
 template_chart_if_available ingress-nginx ingress-nginx/ingress-nginx "${INGRESS_NGINX_CHART_VERSION:-4.15.1}" \
   -f kubernetes/base/ingress-nginx-values.yaml
-template_chart_if_available cert-manager oci://quay.io/jetstack/charts/cert-manager "${CERT_MANAGER_VERSION:-v1.20.2}" \
+template_chart_if_available cert-manager oci://quay.io/jetstack/charts/cert-manager "${CERT_MANAGER_VERSION:-v1.19.5}" \
   -f kubernetes/base/cert-manager-values.yaml
 template_chart_if_available metrics-server metrics-server/metrics-server "${METRICS_SERVER_CHART_VERSION:-3.13.0}" \
   -f kubernetes/base/metrics-server-values.yaml
@@ -75,6 +82,9 @@ template_chart_if_available blackbox-exporter prometheus-community/prometheus-bl
 template_chart_if_available alloy grafana/alloy "${ALLOY_CHART_VERSION:-1.8.0}" \
   --namespace observability \
   -f kubernetes/base/alloy-values.yaml
+template_chart_if_available headlamp headlamp/headlamp "${HEADLAMP_CHART_VERSION:-0.41.0}" \
+  --namespace k8s-admin \
+  -f kubernetes/base/headlamp-values.yaml
 
 # Проверяем stateful зависимости приложений.
 template_chart_if_available postgres bitnami/postgresql "${POSTGRES_CHART_VERSION:-18.6.2}" \

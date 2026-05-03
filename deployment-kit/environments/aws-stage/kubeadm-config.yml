@@ -7,6 +7,6 @@ networking:
 apiServer:
   certSANs:
     - 10.10.10.5
-    - api.mdp
+    - api.pkhco.ru
 controllerManager: {}
 scheduler: {}

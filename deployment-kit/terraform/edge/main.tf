@@ -2,7 +2,7 @@ locals {
   domain_name = trimsuffix(var.domain_name, ".")
   zone_name   = "${trimsuffix(coalesce(var.dns_zone_name, var.domain_name), ".")}."
 
-  # Приватный дефолтный контур стенда. Эти имена используются Helm values и smoke/integration tests.
+  # Базовые публичные entrypoints стенда. Эти имена используются Helm values и smoke/integration tests.
   ingress_hostnames = merge(
     {
       app      = "app.${local.domain_name}"
@@ -19,20 +19,26 @@ locals {
   cdn_origin_hostname    = coalesce(var.cdn_origin_hostname, "origin.${local.domain_name}")
   cdn_origin_host_header = coalesce(var.cdn_origin_host_header, local.ingress_hostnames.app)
 
-  dns_managed = var.dns_mode != "hosts" && (var.create_dns_zone || var.dns_zone_id != null)
-  dns_zone_id = var.create_dns_zone ? yandex_dns_zone.main[0].id : var.dns_zone_id
+  dns_managed            = var.dns_provider == "yandex" && var.dns_mode != "hosts" && (var.create_dns_zone || var.dns_zone_id != null)
+  cloudflare_dns_managed = var.dns_provider == "cloudflare" && var.dns_mode == "public"
+  dns_zone_id            = var.create_dns_zone ? yandex_dns_zone.main[0].id : var.dns_zone_id
 
   ingress_record_hostnames = toset(distinct(concat(
     values(local.ingress_hostnames),
     var.cdn_enabled ? [local.cdn_origin_hostname] : []
   )))
 
+  cloudflare_ingress_records = {
+    for hostname in local.ingress_record_hostnames :
+    hostname => trimsuffix(replace(hostname, ".${local.domain_name}", ""), ".")
+  }
+
   certificate_enabled = var.cdn_enabled && (var.cdn_create_managed_certificate || var.cdn_certificate_manager_id != null)
   certificate_id      = var.cdn_enabled && var.cdn_create_managed_certificate ? data.yandex_cm_certificate.cdn[0].id : var.cdn_certificate_manager_id
 }
 
 resource "yandex_dns_zone" "main" {
-  count = var.create_dns_zone ? 1 : 0
+  count = var.dns_provider == "yandex" && var.create_dns_zone ? 1 : 0
 
   name                = "${var.cluster_name}-edge-zone"
   description         = "DNS zone for deployment-kit ${var.cluster_name}"
@@ -62,6 +68,32 @@ resource "yandex_dns_recordset" "ingress_a" {
   type    = "A"
   ttl     = var.dns_ttl
   data    = [var.ingress_external_ip]
+}
+
+resource "cloudflare_record" "ingress_a" {
+  for_each = local.cloudflare_dns_managed && var.manage_ingress_records ? local.cloudflare_ingress_records : {}
+
+  zone_id = var.cloudflare_zone_id
+  name    = each.value
+  type    = "A"
+  content = var.ingress_external_ip
+  ttl     = var.dns_ttl
+  proxied = var.cloudflare_proxied
+
+  lifecycle {
+    precondition {
+      condition     = var.cloudflare_zone_id != null && length(var.cloudflare_zone_id) > 0
+      error_message = "dns_provider=cloudflare требует cloudflare_zone_id или TF_VAR_cloudflare_zone_id."
+    }
+    precondition {
+      condition     = var.cloudflare_api_token != null && length(var.cloudflare_api_token) > 0
+      error_message = "dns_provider=cloudflare требует cloudflare_api_token или TF_VAR_cloudflare_api_token."
+    }
+    precondition {
+      condition     = var.cloudflare_proxied == false
+      error_message = "Для GitLab/registry используйте Cloudflare DNS only: cloudflare_proxied=false."
+    }
+  }
 }
 
 resource "yandex_cm_certificate" "cdn" {

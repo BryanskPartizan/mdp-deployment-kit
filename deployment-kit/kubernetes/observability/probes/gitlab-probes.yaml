@@ -27,7 +27,7 @@ spec:
         target:
           - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/users/sign_in
         hostname:
-          - gitlab.mdp
+          - gitlab.pkhco.ru
       metricRelabelings:
         - targetLabel: endpoint
           replacement: gitlab-web
@@ -53,7 +53,7 @@ spec:
         target:
           - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/v2/
         hostname:
-          - registry.mdp
+          - registry.pkhco.ru
       metricRelabelings:
         - targetLabel: endpoint
           replacement: gitlab-registry

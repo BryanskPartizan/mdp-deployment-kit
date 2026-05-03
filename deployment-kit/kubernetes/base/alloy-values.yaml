@@ -117,6 +117,8 @@ alloy:
     varlog: false
     dockercontainers: false
   securityContext:
+    runAsUser: 473
+    runAsGroup: 473
     runAsNonRoot: true
     allowPrivilegeEscalation: false
     capabilities:

@@ -21,6 +21,11 @@ output "dns_zone_id" {
   value       = local.dns_zone_id
 }
 
+output "cloudflare_record_hostnames" {
+  description = "Hostnames, которыми управляет Cloudflare DNS, если dns_provider=cloudflare."
+  value       = local.cloudflare_dns_managed ? sort(values(local.ingress_hostnames)) : []
+}
+
 output "cdn_hostname" {
   description = "Публичное имя CDN endpoint."
   value       = var.cdn_enabled ? local.cdn_hostname : null

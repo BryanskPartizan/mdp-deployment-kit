@@ -43,7 +43,7 @@ expect_success() {
   local labels="$3"
   local command="$4"
 
-  echo "OK expected: $title"
+  echo "Проверка разрешения: $title"
   run_probe "$namespace" "$labels" "$command"
 }
 
@@ -55,7 +55,7 @@ expect_failure() {
   local output
   local exit_code
 
-  echo "DENY expected: $title"
+  echo "Проверка запрета: $title"
   set +e
   output=$(run_probe "$namespace" "$labels" "echo PROBE_STARTED; $command" 2>&1)
   exit_code=$?
@@ -82,4 +82,3 @@ wait_rollout() {
 
   kubectl -n "$namespace" rollout status "$kind/$name" --timeout=300s
 }
-

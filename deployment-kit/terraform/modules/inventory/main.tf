@@ -2,15 +2,23 @@
 locals {
   primary_control_plane    = var.control_planes[0]
   secondary_control_planes = length(var.control_planes) > 1 ? slice(var.control_planes, 1, length(var.control_planes)) : []
+  # Эти SSH-настройки попадают в generated inventory и делают ручные ansible-команды воспроизводимыми.
+  ansible_vars = merge(
+    {
+      ansible_user            = var.ssh_user
+      cluster_name            = var.cluster_name
+      control_plane_vip       = var.control_plane_vip
+      control_plane_endpoint  = "${var.control_plane_vip}:6443"
+      ansible_ssh_common_args = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    },
+    var.ssh_private_key_path != null ? {
+      ansible_ssh_private_key_file = var.ssh_private_key_path
+    } : {}
+  )
 
   inventory = {
     all = {
-      vars = {
-        ansible_user           = var.ssh_user
-        cluster_name           = var.cluster_name
-        control_plane_vip      = var.control_plane_vip
-        control_plane_endpoint = "${var.control_plane_vip}:6443"
-      }
+      vars = local.ansible_vars
       children = {
         control_plane = {
           hosts = {

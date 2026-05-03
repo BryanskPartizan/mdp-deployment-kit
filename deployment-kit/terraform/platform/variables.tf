@@ -21,3 +21,14 @@ variable "vault_values_path" {
   default     = "../../kubernetes/base/vault-values.yaml"
 }
 
+variable "vault_host" {
+  description = "Публичный hostname Vault ingress. Пустая строка отключает ingress overlay."
+  type        = string
+  default     = "vault.pkhco.ru"
+}
+
+variable "vault_tls_cluster_issuer" {
+  description = "ClusterIssuer, который выпускает TLS-сертификат для Vault ingress."
+  type        = string
+  default     = "letsencrypt-prod"
+}

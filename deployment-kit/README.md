@@ -21,6 +21,8 @@
 - PostgreSQL
 - Redis
 
+В каталоге `apps/` лежат минимальные demo-заглушки для `API`, `gateway` и `frontend`: простая форма создаёт сущность, а чтение выполняется по id через маршрут `/entities/:id`.
+
 ### Платформенный контур
 - ingress-nginx с публикацией через NodePort на worker-узлах
 - cert-manager с локальным центром сертификации для демонстрационных TLS-сертификатов
@@ -61,6 +63,10 @@ make vault-init ENV=vm-dev
 make vault-configure ENV=vm-dev
 make deploy-platform ENV=vm-dev
 make deploy-gitlab ENV=vm-dev
+make prepare-gitlab-registry-projects ENV=vm-dev
+make bootstrap-gitlab-app-ci ENV=vm-dev
+make docker-registry-login ENV=vm-dev
+PUSH_IMAGES=true make build-stub-images
 make deploy-apps ENV=vm-dev
 make test-smoke ENV=vm-dev
 make test-network ENV=vm-dev
@@ -75,11 +81,13 @@ make test-gitlab ENV=vm-dev
 - Перед запуском Terraform экспортируйте `TF_VAR_yc_token` либо передайте `yc_token` через tfvars/CI-переменные.
 - Kubernetes API публикуется через Yandex Network Load Balancer на порту `6443`; этот адрес используется как kubeadm `controlPlaneEndpoint`.
 - Ingress-контроллер публикуется через NodePort `30080/30443`, а внешний HTTP/HTTPS-трафик приходит через отдельный Yandex Network Load Balancer `80/443 -> 30080/30443`.
-- Дефолтный приватный домен стенда — `mdp`: `app.mdp`, `gateway.mdp`, `gitlab.mdp`, `registry.mdp`. Для него используется self-signed TLS через cert-manager issuer `test-selfsigned`.
-- Edge-слой `terraform/edge` может только сгенерировать hosts-записи для `mdp` либо управлять Cloud DNS, Certificate Manager и CDN для реального публичного домена.
+- Текущий дефолтный домен стенда — публичный `pkhco.ru`: `app.pkhco.ru`, `gateway.pkhco.ru`, `gitlab.pkhco.ru`, `registry.pkhco.ru`, `vault.pkhco.ru`, `grafana.pkhco.ru`, `k8s-admin.pkhco.ru`. Для него используется Let's Encrypt через cert-manager.
+- Приватный fallback `mdp` доступен только при явном переопределении `APP_DOMAIN=mdp` и `TLS_CLUSTER_ISSUER=test-selfsigned`.
+- Edge-слой `terraform/edge` управляет Cloudflare DNS only записями для `pkhco.ru`; для приватного fallback может генерировать hosts-записи.
 - Класс хранения по умолчанию — `local-path`, что позволяет динамически создавать PVC для PostgreSQL, Redis, Prometheus и Loki на локальном хранилище узлов.
 - Vault устанавливается Terraform-слоем `terraform/platform`, а auth methods, policies и demo-секреты описаны в `terraform/vault`.
-- GitLab разворачивается как devops-компонент платформы через официальный chart `gitlab/gitlab` и публикуется через тот же ingress NLB на `gitlab.mdp` и `registry.mdp`.
+- GitLab разворачивается как devops-компонент платформы через официальный chart `gitlab/gitlab` и публикуется через тот же ingress NLB на `gitlab.pkhco.ru` и `registry.pkhco.ru`.
+- `make bootstrap-gitlab-app-ci` создаёт проект `platform/deployment-kit`, записывает CI variables и включает GitLab pipeline для сборки, публикации и деплоя demo-приложений.
 - Секреты передаются через переменные окружения/CI variables. Для локального стенда используйте `.env.example` как шаблон, но не коммитьте `.env`.
 
 ## Дополнительные замечания

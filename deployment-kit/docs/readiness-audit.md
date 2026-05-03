@@ -40,7 +40,7 @@ terraform -chdir=terraform/edge validate
 - добавлены `make edge-plan` и `make edge-apply`;
 - hosts-файл сохраняется как `.artifacts/<env>/hosts-file` и дополнительный доменный alias, например `hosts-mdp`;
 - self-signed TLS оставлен дефолтом для `mdp`;
-- Let's Encrypt issuer включается только явно через `TLS_CLUSTER_ISSUER=letsencrypt-staging|letsencrypt-prod`;
+- Let's Encrypt issuer включается только как production `TLS_CLUSTER_ISSUER=letsencrypt-prod`;
 - CDN выключен по умолчанию и предназначен для frontend/static, а не для GitLab/API/registry.
 
 Остаточные ограничения:
@@ -59,7 +59,7 @@ terraform -chdir=terraform/edge validate
 - Runner manager работает в `devops`, job pods запускаются в `ci`;
 - Runner RBAC ограничен Role в namespace `ci`, без cluster-wide access;
 - Runner job pods запускаются без privileged mode и с resource requests/limits;
-- Registry включён и публикуется через ingress `registry.mdp`.
+- Registry включён и публикуется через ingress `registry.pkhco.ru`.
 
 Остаточные ограничения:
 - bundled PostgreSQL/Redis/MinIO подходят для самодостаточного стенда, но не для production-grade GitLab;

@@ -7,6 +7,7 @@ locals {
     var.ssh_public_key != null ? "value" : "",
     var.ssh_public_key_path != null ? "path" : ""
   ]))
+  ssh_private_key_path     = var.ssh_private_key_path != null ? var.ssh_private_key_path : (var.ssh_public_key_path != null && endswith(var.ssh_public_key_path, ".pub") ? trimsuffix(var.ssh_public_key_path, ".pub") : null)
   worker_preemptible       = var.worker_preemptible != null ? var.worker_preemptible : var.preemptible
   enable_control_plane_nat = var.enable_control_plane_nat != null ? var.enable_control_plane_nat : var.enable_nat
   enable_worker_nat        = var.enable_worker_nat != null ? var.enable_worker_nat : var.enable_nat
@@ -99,10 +100,11 @@ module "load_balancer" {
 
 # Модуль inventory подготавливает inventory для последующего запуска Ansible.
 module "inventory" {
-  source            = "../modules/inventory"
-  control_planes    = module.compute.control_planes
-  workers           = module.compute.workers
-  ssh_user          = var.ssh_user
-  cluster_name      = var.cluster_name
-  control_plane_vip = local.control_plane_endpoint_ip
+  source               = "../modules/inventory"
+  control_planes       = module.compute.control_planes
+  workers              = module.compute.workers
+  ssh_user             = var.ssh_user
+  ssh_private_key_path = local.ssh_private_key_path
+  cluster_name         = var.cluster_name
+  control_plane_vip    = local.control_plane_endpoint_ip
 }

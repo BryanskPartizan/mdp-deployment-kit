@@ -99,7 +99,7 @@ spec:
         target:
           - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health
         hostname:
-          - app.mdp
+          - app.pkhco.ru
       metricRelabelings:
         - targetLabel: endpoint
           replacement: ingress-frontend
@@ -125,7 +125,7 @@ spec:
         target:
           - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health
         hostname:
-          - gateway.mdp
+          - gateway.pkhco.ru
       metricRelabelings:
         - targetLabel: endpoint
           replacement: ingress-gateway
