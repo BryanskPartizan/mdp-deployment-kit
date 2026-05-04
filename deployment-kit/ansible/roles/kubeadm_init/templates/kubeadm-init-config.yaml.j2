@@ -2,12 +2,12 @@
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 localAPIEndpoint:
-  advertiseAddress: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+  advertiseAddress: {{ hostvars[inventory_hostname].node_ip | default(ansible_facts["default_ipv4"]["address"]) }}
   bindPort: 6443
 nodeRegistration:
   criSocket: unix:///run/containerd/containerd.sock
   kubeletExtraArgs:
-    node-ip: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+    node-ip: {{ hostvars[inventory_hostname].node_ip | default(ansible_facts["default_ipv4"]["address"]) }}
 ---
 # Шаблон определяет параметры инициализации первого control-plane узла.
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -18,6 +18,11 @@ controlPlaneEndpoint: {{ control_plane_endpoint }}
 networking:
   podSubnet: {{ pod_subnet }}
   serviceSubnet: {{ service_subnet }}
+etcd:
+  local:
+    extraArgs:
+      # Метрики etcd публикуются на node_ip, чтобы Prometheus мог скрейпить kubeadm static pods.
+      listen-metrics-urls: http://0.0.0.0:2381
 apiServer:
   certSANs:
 {% set cert_sans = [control_plane_endpoint.split(':')[0]] %}

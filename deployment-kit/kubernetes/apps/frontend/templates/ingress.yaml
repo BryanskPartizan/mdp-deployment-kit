@@ -4,8 +4,7 @@ kind: Ingress
 metadata:
   name: {{ .Chart.Name }}
   annotations:
-    # Издатель сертификата задаётся через values, чтобы приватный режим работал на self-signed TLS,
-    # а публичный стенд использовал Let's Encrypt без правки chart.
+    # Издатель сертификата задаётся через values; публичный профиль допускает только letsencrypt-prod.
     cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}

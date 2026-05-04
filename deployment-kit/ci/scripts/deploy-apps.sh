@@ -5,6 +5,7 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NAMESPACE=${APP_NAMESPACE:-app}
 GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
 GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
@@ -17,11 +18,14 @@ TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-${REGISTRY_SERVER:-registry.${APP_DOMAIN}}}
 IMAGE_TAG=${APP_IMAGE_TAG:-${IMAGE_TAG:-0.2.0}}
 
+source "${SCRIPT_DIR}/lib/public-tls.sh"
+
 validate_tls_issuer() {
-  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-staging" ]]; then
-    echo "letsencrypt-staging запрещён. Используйте letsencrypt-prod для публичного домена или test-selfsigned для приватного mdp." >&2
-    exit 1
-  fi
+  validate_public_tls_inputs
+}
+
+is_placeholder() {
+  [[ "${1:-}" == REPLACE_WITH_* ]]
 }
 
 secret_or_demo() {
@@ -47,6 +51,14 @@ create_registry_secret_if_possible() {
   local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-registry.${APP_DOMAIN}}}
   local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-root}}
   local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
+
+  if is_placeholder "$registry_user"; then
+    registry_user=root
+  fi
+
+  if is_placeholder "$registry_password"; then
+    registry_password=""
+  fi
 
   if [[ -z "$registry_password" ]] && kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
     echo "Пароль registry не задан явно; используем secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."
@@ -92,6 +104,23 @@ create_postgres_secret() {
     --dry-run=client -o yaml | kubectl apply -f -
 }
 
+check_app_images_if_possible() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Проверка наличия app-образов пропущена: docker CLI недоступен."
+    return 0
+  fi
+
+  local image
+  for app in api gateway frontend; do
+    image="${IMAGE_REGISTRY}/platform/${app}:${IMAGE_TAG}"
+    echo "Проверка наличия образа ${image}."
+    if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+      echo "Образ ${image} не найден или недоступен. Сначала выполните: PUSH_IMAGES=true make build-stub-images" >&2
+      exit 1
+    fi
+  done
+}
+
 wait_rollout() {
   local ns="$1"
   local kind="$2"
@@ -121,8 +150,13 @@ fi
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 validate_tls_issuer
+require_prod_cluster_issuer
 create_registry_secret_if_possible
 create_postgres_secret
+check_app_images_if_possible
+delete_tls_artifact_if_not_prod "$NAMESPACE" api-tls api-tls
+delete_tls_artifact_if_not_prod "$NAMESPACE" gateway-tls gateway-tls
+delete_tls_artifact_if_not_prod "$NAMESPACE" frontend-tls frontend-tls
 
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
 helm repo update bitnami
@@ -132,6 +166,7 @@ helm upgrade --install postgres bitnami/postgresql \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --wait \
+  --hide-notes \
   --timeout 15m \
   -f kubernetes/apps/postgres/values.yaml \
   -f "$POSTGRES_ENV_FILE"
@@ -140,6 +175,7 @@ helm upgrade --install redis bitnami/redis \
   --version "$REDIS_CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 15m \
   -f kubernetes/apps/redis/values.yaml \
   -f "$REDIS_ENV_FILE"
@@ -147,6 +183,7 @@ helm upgrade --install redis bitnami/redis \
 helm upgrade --install api kubernetes/apps/api \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/api/values.yaml \
   -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml" \
@@ -158,6 +195,7 @@ helm upgrade --install api kubernetes/apps/api \
 helm upgrade --install gateway kubernetes/apps/gateway \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/gateway/values.yaml \
   -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml" \
@@ -169,6 +207,7 @@ helm upgrade --install gateway kubernetes/apps/gateway \
 helm upgrade --install frontend kubernetes/apps/frontend \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/frontend/values.yaml \
   -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml" \
@@ -186,6 +225,11 @@ wait_rollout "$NAMESPACE" statefulset redis-master
 wait_rollout "$NAMESPACE" deployment api
 wait_rollout "$NAMESPACE" deployment gateway
 wait_rollout "$NAMESPACE" deployment frontend
+wait_certificate_ready "$NAMESPACE" gateway-tls 1200s
+wait_certificate_ready "$NAMESPACE" frontend-tls 1200s
+if kubectl -n "$NAMESPACE" get certificate api-tls >/dev/null 2>&1; then
+  wait_certificate_ready "$NAMESPACE" api-tls 1200s
+fi
 
 APP_PROBES_FILE=$(render_app_probes)
 trap 'rm -f "$APP_PROBES_FILE"' EXIT

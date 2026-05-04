@@ -1,7 +1,7 @@
 # stage-профиль сохраняет тот же доменный контур, но увеличивает persistent volumes.
 global:
   hosts:
-    domain: mdp
+    domain: pkhco.ru
 
 gitlab:
   webservice:
@@ -27,4 +27,3 @@ redis:
 minio:
   persistence:
     size: 20Gi
-

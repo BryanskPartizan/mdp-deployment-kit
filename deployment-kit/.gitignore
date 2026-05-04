@@ -21,3 +21,4 @@ local.env
 .env
 .env.*
 !.env.example
+final_log

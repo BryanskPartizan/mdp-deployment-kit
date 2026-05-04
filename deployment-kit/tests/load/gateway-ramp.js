@@ -18,8 +18,8 @@ export const options = {
   },
 };
 
-const domain = __ENV.APP_DOMAIN || 'mdp';
-const target = __ENV.TARGET_URL || `http://gateway.${domain}/health`;
+const domain = __ENV.APP_DOMAIN || 'pkhco.ru';
+const target = __ENV.TARGET_URL || `https://gateway.${domain}/health`;
 
 export default function () {
   const res = http.get(target);

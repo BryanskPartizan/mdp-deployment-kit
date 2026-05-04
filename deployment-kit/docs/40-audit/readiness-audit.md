@@ -21,7 +21,7 @@ terraform -chdir=terraform/edge validate
 
 ## Совместимость версий
 
-Зафиксированы версии Terraform providers и Helm charts в `docs/versions.md`.
+Зафиксированы версии Terraform providers и Helm charts в `docs/00-overview/versions.md`.
 
 Ключевые проверки:
 - GitLab chart `9.11.1` рендерится с dev/stage values;
@@ -35,11 +35,10 @@ terraform -chdir=terraform/edge validate
 ## Edge, DNS и CDN
 
 Сделано:
-- дефолтный приватный домен заменён на `mdp`;
-- добавлен `terraform/edge` для hosts-only режима, Cloud DNS, Certificate Manager и CDN;
+- дефолтный домен заменён на публичный `pkhco.ru`;
+- добавлен `terraform/edge` для Cloudflare DNS only режима, Cloud DNS, Certificate Manager и CDN;
 - добавлены `make edge-plan` и `make edge-apply`;
-- hosts-файл сохраняется как `.artifacts/<env>/hosts-file` и дополнительный доменный alias, например `hosts-mdp`;
-- self-signed TLS оставлен дефолтом для `mdp`;
+- hosts-файл сохраняется как `.artifacts/<env>/hosts-file` только как диагностический fallback;
 - Let's Encrypt issuer включается только как production `TLS_CLUSTER_ISSUER=letsencrypt-prod`;
 - CDN выключен по умолчанию и предназначен для frontend/static, а не для GitLab/API/registry.
 
@@ -63,7 +62,7 @@ terraform -chdir=terraform/edge validate
 
 Остаточные ограничения:
 - bundled PostgreSQL/Redis/MinIO подходят для самодостаточного стенда, но не для production-grade GitLab;
-- TLS в GitLab сейчас основан на self-signed issuer deployment-kit;
+- TLS GitLab выпускается через production Let's Encrypt ClusterIssuer `letsencrypt-prod`;
 - GitLab backup/restore нужно выделить в отдельную процедуру перед production-like использованием.
 
 ## Observability
@@ -110,28 +109,27 @@ terraform -chdir=terraform/edge validate
 ## Известные production gaps
 
 Перед настоящей production эксплуатацией нужно:
-- заменить self-signed issuer на ACME/корпоративный CA;
 - включить TLS на Vault listener и настроить сертификаты;
 - убрать `--kubelet-insecure-tls` у metrics-server после настройки kubelet serving certificates;
 - перевести GitLab PostgreSQL/Redis/Object Storage на managed/external сервисы;
 - добавить GitLab backup/restore;
 - расширить supply-chain проверки образов: подписи образов; SBOM и базовый Trivy scan добавлены в app pipeline template;
 - подготовить реальные demo/app images и проверить registry push/pull;
-- выполнить полный live-прогон в Yandex Cloud.
+- повторять полный live-прогон в Yandex Cloud перед значимыми изменениями инфраструктурных сценариев.
 
-## Live-проверки, которые ещё нужны
+## Контрольный live-прогон
 
-Локально нельзя подтвердить без реального стенда:
+Для подтверждения готовности стенда выполняется полный live-прогон:
 
 ```bash
 make infra-plan ENV=vm-dev
 make infra-apply ENV=vm-dev
 make edge-apply ENV=vm-dev
 make kubeadm-bootstrap ENV=vm-dev
+make deploy-platform ENV=vm-dev
 make deploy-vault ENV=vm-dev
 make vault-init ENV=vm-dev
 make vault-configure ENV=vm-dev
-make deploy-platform ENV=vm-dev
 make deploy-gitlab ENV=vm-dev
 make deploy-apps ENV=vm-dev
 make test-smoke ENV=vm-dev
@@ -144,3 +142,5 @@ make test-resilience ENV=vm-dev
 ```
 
 Критерий готовности: все команды выше завершаются успешно, GitLab Registry принимает push/pull, Alloy отправляет логи в Loki, Grafana dashboards показывают данные, blackbox probes зелёные.
+
+Фактический контрольный прогон `vm-dev` оформлен в каталоге [`../../../execution-log`](../../../execution-log).

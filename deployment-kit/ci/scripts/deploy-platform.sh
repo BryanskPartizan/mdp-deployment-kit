@@ -5,6 +5,7 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 INGRESS_NGINX_CHART_VERSION=${INGRESS_NGINX_CHART_VERSION:-4.15.1}
 CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION:-v1.19.5}
@@ -23,21 +24,40 @@ LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}
 GRAFANA_HOST=${GRAFANA_HOST:-grafana.${APP_DOMAIN}}
 K8S_ADMIN_HOST=${K8S_ADMIN_HOST:-k8s-admin.${APP_DOMAIN}}
 
+source "${SCRIPT_DIR}/lib/public-tls.sh"
+
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
 }
 
 validate_tls_issuer() {
-  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-staging" ]]; then
-    echo "letsencrypt-staging запрещён. Используйте letsencrypt-prod для публичного домена или test-selfsigned для приватного mdp." >&2
-    exit 1
-  fi
+  validate_public_tls_inputs
 }
 
-remove_staging_issuer() {
-  # Тестовый Let's Encrypt запрещён для стенда: Docker и клиенты не доверяют staging CA.
-  kubectl delete clusterissuer letsencrypt-staging --ignore-not-found
+validate_platform_inputs() {
+  local has_errors=false
+
+  if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]] \
+    && ! kubectl -n observability get secret grafana-admin >/dev/null 2>&1 \
+    && [[ "$ALLOW_INSECURE_DEMO_SECRETS" != "true" ]]; then
+    echo "Задайте GRAFANA_ADMIN_PASSWORD или включите ALLOW_INSECURE_DEMO_SECRETS=true для demo-стенда." >&2
+    has_errors=true
+  fi
+
+  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-prod" && -z "$LETSENCRYPT_EMAIL" ]]; then
+    echo "Для TLS_CLUSTER_ISSUER=letsencrypt-prod задайте LETSENCRYPT_EMAIL." >&2
+    has_errors=true
+  fi
+
+  if [[ "$K8S_ADMIN_ENABLED" == "true" && -z "${K8S_ADMIN_BASIC_AUTH_HTPASSWD:-}" ]]; then
+    echo "Для K8S_ADMIN_ENABLED=true задайте K8S_ADMIN_BASIC_AUTH_HTPASSWD." >&2
+    has_errors=true
+  fi
+
+  if [[ "$has_errors" == "true" ]]; then
+    exit 1
+  fi
 }
 
 wait_rollout() {
@@ -102,12 +122,8 @@ create_headlamp_basic_auth_secret() {
 apply_public_acme_issuer_if_requested() {
   local issuer="$TLS_CLUSTER_ISSUER"
 
-  if [[ "$issuer" != "letsencrypt-prod" ]]; then
-    return
-  fi
-
   if [[ -z "$LETSENCRYPT_EMAIL" ]]; then
-    echo "Для TLS_CLUSTER_ISSUER=${issuer} задайте LETSENCRYPT_EMAIL. Для приватного домена mdp используйте test-selfsigned." >&2
+    echo "Для TLS_CLUSTER_ISSUER=${issuer} задайте LETSENCRYPT_EMAIL." >&2
     exit 1
   fi
 
@@ -176,7 +192,7 @@ EOF
 
 require_file "$KUBECONFIG"
 validate_tls_issuer
-remove_staging_issuer
+validate_platform_inputs
 require_file kubernetes/bootstrap/namespaces.yaml
 require_file kubernetes/base/blackbox-exporter-values.yaml
 require_file kubernetes/base/alloy-values.yaml
@@ -203,6 +219,21 @@ helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/ >/dev/null 2>&1 || true
 helm repo update
 
+helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version "$CERT_MANAGER_VERSION" \
+  --namespace cert-manager \
+  --create-namespace \
+  --wait \
+  --timeout 10m \
+  -f kubernetes/base/cert-manager-values.yaml
+
+apply_public_acme_issuer_if_requested
+delete_non_prod_cluster_issuers
+delete_tls_artifact_if_not_prod observability grafana-tls grafana-tls
+if [[ "$K8S_ADMIN_ENABLED" == "true" ]]; then
+  delete_tls_artifact_if_not_prod k8s-admin headlamp-tls headlamp-tls
+fi
+
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --version "$PROMETHEUS_STACK_CHART_VERSION" \
   --namespace observability \
@@ -219,19 +250,6 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --wait \
   --timeout 10m \
   -f kubernetes/base/ingress-nginx-values.yaml
-
-helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
-  --version "$CERT_MANAGER_VERSION" \
-  --namespace cert-manager \
-  --create-namespace \
-  --wait \
-  --timeout 10m \
-  -f kubernetes/base/cert-manager-values.yaml
-
-kubectl apply -f kubernetes/bootstrap/cluster-issuers.yaml
-kubectl wait --for=condition=Ready clusterissuer/selfsigned-bootstrap --timeout=300s
-kubectl wait --for=condition=Ready clusterissuer/test-selfsigned --timeout=300s
-apply_public_acme_issuer_if_requested
 
 helm upgrade --install metrics-server metrics-server/metrics-server \
   --version "$METRICS_SERVER_CHART_VERSION" \
@@ -279,8 +297,14 @@ if [[ "$K8S_ADMIN_ENABLED" == "true" ]]; then
     --timeout 10m \
     -f kubernetes/base/headlamp-values.yaml \
     -f "$HEADLAMP_DOMAIN_VALUES_FILE"
+
+  wait_certificate_ready k8s-admin headlamp-tls 1200s
 fi
+
+wait_certificate_ready observability grafana-tls 1200s
 
 kubectl get pods -A
 kubectl get sc
-kubectl get clusterissuer
+if kubectl get crd clusterissuers.cert-manager.io >/dev/null 2>&1; then
+  kubectl get clusterissuer
+fi

@@ -430,3 +430,90 @@ data:
         }
       ]
     }
+  etcd.json: |-
+    {
+      "uid": "deployment-kit-etcd",
+      "title": "Deployment Kit / etcd",
+      "tags": ["deployment-kit", "kubernetes", "etcd"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-6h", "to": "now"},
+      "panels": [
+        {
+          "type": "stat",
+          "title": "etcd targets up",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "targets": [{"refId": "A", "expr": "sum(up{job=\"kube-etcd\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 3}]}}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "Leader changes 15m",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "targets": [{"refId": "A", "expr": "sum(increase(etcd_server_leader_changes_seen_total{job=\"kube-etcd\"}[15m]))"}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 1}, {"color": "red", "value": 3}]}}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "DB size",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "targets": [{"refId": "A", "expr": "max(etcd_mvcc_db_total_size_in_bytes{job=\"kube-etcd\"})"}],
+          "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []}
+        },
+        {
+          "type": "stat",
+          "title": "Active leader",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "targets": [{"refId": "A", "expr": "sum(etcd_server_has_leader{job=\"kube-etcd\"})"}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 3}]}}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Disk fsync p99",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "targets": [{"refId": "A", "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{job=\"kube-etcd\"}[5m])))", "legendFormat": "{{ instance }}"}],
+          "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Backend commit p99",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "targets": [{"refId": "A", "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(etcd_disk_backend_commit_duration_seconds_bucket{job=\"kube-etcd\"}[5m])))", "legendFormat": "{{ instance }}"}],
+          "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Proposals",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "targets": [
+            {"refId": "A", "expr": "sum by (instance) (rate(etcd_server_proposals_committed_total{job=\"kube-etcd\"}[5m]))", "legendFormat": "{{ instance }} committed"},
+            {"refId": "B", "expr": "sum by (instance) (rate(etcd_server_proposals_failed_total{job=\"kube-etcd\"}[5m]))", "legendFormat": "{{ instance }} failed"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "timeseries",
+          "title": "Network peer round trip p99",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "targets": [{"refId": "A", "expr": "histogram_quantile(0.99, sum by (le, instance, To) (rate(etcd_network_peer_round_trip_time_seconds_bucket{job=\"kube-etcd\"}[5m])))", "legendFormat": "{{ instance }} -> {{ To }}"}],
+          "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []}
+        },
+        {
+          "type": "table",
+          "title": "Scrape targets",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+          "targets": [{"refId": "A", "expr": "up{job=\"kube-etcd\"}", "format": "table", "instant": true}]
+        }
+      ]
+    }

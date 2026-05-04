@@ -26,7 +26,7 @@
 
 ## Yandex Cloud services
 - Network Load Balancer для Kubernetes API и ingress.
-- Cloud DNS, Certificate Manager и CDN используются в отдельном `terraform/edge`-слое и по умолчанию выключены для приватного домена `mdp`.
+- Cloud DNS, Certificate Manager и CDN используются в отдельном `terraform/edge`-слое как опциональные расширения публичного профиля.
 
 ## GitLab bundled dependencies
 - GitLab chart `9.11.1` declares bundled `gitlab-runner` chart `0.87.0` (`appVersion` `18.10.0`).

@@ -1,15 +1,25 @@
 @startuml
-title Поток CI/CD
-actor Инженер
-rectangle GitLab
-rectangle "Реестр контейнерных образов" as reg
-rectangle "Инфраструктурный pipeline" as infra
-rectangle "Прикладной pipeline" as app
-rectangle "Kubernetes-кластер" as k8s
-Инженер --> GitLab
-GitLab --> infra
-GitLab --> app
-app --> reg
-infra --> k8s
-app --> k8s
+title Поток CI/CD приложений
+left to right direction
+skinparam shadowing false
+
+actor "Разработчик" as dev
+rectangle "GitLab project\nplatform/deployment-kit" as repo
+rectangle "GitLab CI" as ci
+rectangle "Validate\nlint, shell, tests" as validate
+rectangle "Build images\napi/gateway/frontend" as build
+database "GitLab Container Registry" as registry
+rectangle "Deploy charts\nhelm upgrade" as deploy
+rectangle "Kubernetes namespace app" as app
+rectangle "JSON/HTML test reports" as reports
+
+dev --> repo
+repo --> ci
+ci --> validate
+ci --> build
+build --> registry
+registry --> deploy
+ci --> deploy
+deploy --> app
+app --> reports
 @enduml

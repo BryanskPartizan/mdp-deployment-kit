@@ -19,6 +19,11 @@ kubectl -n app get networkpolicy \
   allow-gateway-to-api \
   allow-api-to-postgres \
   allow-api-to-redis \
+  allow-app-dns-egress \
+  allow-frontend-to-gateway-egress \
+  allow-gateway-to-api-egress \
+  allow-api-to-datastores-egress \
+  allow-app-to-vault-egress \
   allow-observability-scrape \
   allow-observability-to-datastores
 

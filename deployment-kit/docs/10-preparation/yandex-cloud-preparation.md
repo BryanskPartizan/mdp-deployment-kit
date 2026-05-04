@@ -460,7 +460,7 @@ cat .artifacts/vm-dev/hosts-file
 <INGRESS_IP> app.pkhco.ru gateway.pkhco.ru api.pkhco.ru gitlab.pkhco.ru registry.pkhco.ru minio.pkhco.ru
 ```
 
-Этот вариант подходит для demo, потому что `mdp` не является нормальным публичным доменом.
+Для текущего публичного профиля используйте реальные Cloudflare DNS-записи `pkhco.ru`; hosts-файл остаётся только диагностическим fallback для `curl --resolve`.
 
 ### Вариант B. Реальный домен в Cloud DNS через Terraform
 
@@ -487,7 +487,7 @@ make edge-apply ENV=vm-dev
 export APP_DOMAIN=example.com
 ```
 
-Подробная модель доменов, TLS и CDN описана в `docs/domain-cdn.md`.
+Подробная модель доменов, TLS и CDN описана в `docs/10-preparation/domain-cdn.md`.
 
 ## 11. Проверить исходящий доступ с будущих VM
 
@@ -515,7 +515,7 @@ allowed_ssh_cidrs   = ["<your_public_ip>/32"]
 allowed_api_cidrs   = ["<your_public_ip>/32"]
 ```
 
-Заполните `environments/vm-dev/edge.tfvars`: `yc_cloud_id`, `yc_folder_id`, `yc_zone` и `cluster_name` должны соответствовать основному окружению. Для стартового приватного режима оставьте `domain_name = "mdp"`, `dns_mode = "hosts"` и `cdn_enabled = false`.
+Заполните `environments/vm-dev/edge.tfvars`: `yc_cloud_id`, `yc_folder_id`, `yc_zone` и `cluster_name` должны соответствовать основному окружению. Для текущего публичного профиля используйте `domain_name = "pkhco.ru"`, `dns_provider = "cloudflare"`, `dns_mode = "public"` и `cdn_enabled = false`.
 
 Создайте `.env`:
 

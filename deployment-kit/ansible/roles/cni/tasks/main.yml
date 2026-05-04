@@ -15,21 +15,35 @@
 - name: Установка Calico operator CRD
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl apply -f {{ calico_operator_crds_url }}
+  command: kubectl apply --server-side --force-conflicts -f {{ calico_operator_crds_url }}
   register: calico_crds_apply
   retries: 5
   delay: 15
   until: calico_crds_apply.rc == 0
   when: cni_provider | default('calico') == 'calico'
 
+- name: Ожидание регистрации Calico Installation CRD
+  environment:
+    KUBECONFIG: /root/.kube/config
+  command: kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=180s
+  changed_when: false
+  when: cni_provider | default('calico') == 'calico'
+
 - name: Установка Calico operator
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl apply -f {{ calico_operator_manifest_url }}
+  command: kubectl apply --server-side --force-conflicts -f {{ calico_operator_manifest_url }}
   register: calico_operator_apply
   retries: 5
   delay: 15
   until: calico_operator_apply.rc == 0
+  when: cni_provider | default('calico') == 'calico'
+
+- name: Ожидание готовности Tigera operator
+  environment:
+    KUBECONFIG: /root/.kube/config
+  command: kubectl -n tigera-operator rollout status deployment/tigera-operator --timeout=300s
+  changed_when: false
   when: cni_provider | default('calico') == 'calico'
 
 - name: Генерация Calico Installation custom resource
@@ -42,25 +56,44 @@
 - name: Применение Calico Installation custom resource
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl apply -f /root/calico-installation.yaml
+  command: kubectl apply --server-side --force-conflicts -f /root/calico-installation.yaml
   register: calico_installation_apply
   retries: 10
   delay: 15
   until: calico_installation_apply.rc == 0
   when: cni_provider | default('calico') == 'calico'
 
+- name: Ожидание создания namespace calico-system
+  environment:
+    KUBECONFIG: /root/.kube/config
+  command: kubectl get namespace calico-system
+  register: calico_system_namespace
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: calico_system_namespace.rc == 0
+  when: cni_provider | default('calico') == 'calico'
+
 - name: Ожидание rollout Calico node DaemonSet
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl -n calico-system rollout status daemonset/calico-node --timeout=600s
+  command: kubectl -n calico-system rollout status daemonset/calico-node --timeout=30s
+  register: calico_node_rollout
   changed_when: false
+  retries: 30
+  delay: 10
+  until: calico_node_rollout.rc == 0
   when: cni_provider | default('calico') == 'calico'
 
 - name: Ожидание готовности Calico controllers
   environment:
     KUBECONFIG: /root/.kube/config
-  command: kubectl -n calico-system rollout status deployment/calico-kube-controllers --timeout=600s
+  command: kubectl -n calico-system rollout status deployment/calico-kube-controllers --timeout=30s
+  register: calico_controllers_rollout
   changed_when: false
+  retries: 30
+  delay: 10
+  until: calico_controllers_rollout.rc == 0
   when: cni_provider | default('calico') == 'calico'
 
 - name: Установка CNI из внешнего manifest

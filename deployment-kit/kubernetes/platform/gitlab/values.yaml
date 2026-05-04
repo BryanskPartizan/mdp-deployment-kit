@@ -2,7 +2,7 @@
 global:
   edition: ce
   hosts:
-    domain: mdp
+    domain: pkhco.ru
     https: true
     externalIP: "127.0.0.1"
     gitlab:
@@ -45,7 +45,7 @@ prometheus:
 
 gitlab-runner:
   install: true
-  # Runner регистрируется через внутренний Service GitLab, чтобы не зависеть от DNS приватного домена mdp внутри кластера.
+  # Runner регистрируется через внутренний Service GitLab, чтобы не зависеть от внешнего DNS внутри кластера.
   gitlabUrl: http://gitlab-webservice-default.devops.svc.cluster.local:8080
   rbac:
     create: true

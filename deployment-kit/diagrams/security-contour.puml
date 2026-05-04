@@ -1,4 +1,21 @@
 @startuml
 title Контур безопасности
+left to right direction
 skinparam shadowing false
+
+rectangle "Security Group\nSSH/API/Ingress CIDR" as sg
+rectangle "Namespace isolation" as ns
+rectangle "RBAC\napp-deployer, runner, vault-auth" as rbac
+rectangle "NetworkPolicy\ndefault deny + explicit allow" as np
+rectangle "Vault policies\nKubernetes auth" as vault
+rectangle "TLS\nletsencrypt-prod only" as tls
+rectangle "GitLab secrets\nKubernetes Secret / CI variables" as secrets
+
+sg --> ns
+ns --> rbac
+ns --> np
+rbac --> vault
+np --> vault
+tls --> secrets
+vault --> secrets
 @enduml

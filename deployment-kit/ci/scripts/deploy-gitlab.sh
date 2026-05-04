@@ -5,6 +5,7 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
 GITLAB_RELEASE=${GITLAB_RELEASE:-gitlab}
@@ -15,16 +16,15 @@ ROTATE_GITLAB_ROOT_PASSWORD=${ROTATE_GITLAB_ROOT_PASSWORD:-false}
 APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
 TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
 
+source "${SCRIPT_DIR}/lib/public-tls.sh"
+
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
 }
 
 validate_tls_issuer() {
-  if [[ "$TLS_CLUSTER_ISSUER" == "letsencrypt-staging" ]]; then
-    echo "letsencrypt-staging запрещён. Используйте letsencrypt-prod для публичного домена или test-selfsigned для приватного mdp." >&2
-    exit 1
-  fi
+  validate_public_tls_inputs
 }
 
 generate_demo_password() {
@@ -130,6 +130,7 @@ ensure_gitlab_root_secret() {
 
 require_file "$KUBECONFIG"
 validate_tls_issuer
+require_prod_cluster_issuer
 require_file kubernetes/platform/gitlab/values.yaml
 require_file kubernetes/observability/probes/gitlab-probes.yaml
 
@@ -138,6 +139,10 @@ kubectl create namespace ci --dry-run=client -o yaml | kubectl apply -f -
 
 ROOT_PASSWORD=$(resolve_gitlab_root_password)
 ensure_gitlab_root_secret "$ROOT_PASSWORD"
+
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-wildcard-tls gitlab-wildcard-tls
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-webservice-tls gitlab-webservice-tls
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-registry-tls gitlab-registry-tls
 
 EXTERNAL_IP=$(resolve_ingress_ip)
 HELM_SET_ARGS=()
@@ -164,6 +169,10 @@ helm upgrade --install "$GITLAB_RELEASE" gitlab/gitlab \
 GITLAB_PROBES_FILE=$(render_gitlab_probes)
 trap 'rm -f "$GITLAB_DOMAIN_VALUES_FILE" "$GITLAB_PROBES_FILE"' EXIT
 kubectl apply -f "$GITLAB_PROBES_FILE"
+
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-wildcard-tls 1800s
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-webservice-tls 1800s
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-registry-tls 1800s
 
 kubectl -n "$GITLAB_NAMESPACE" get pods,svc,ingress,pvc
 echo "GitLab root password хранится в Kubernetes secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."

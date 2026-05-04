@@ -14,10 +14,10 @@ else
   echo "node не найден, проверка JS-заглушек пропущена."
 fi
 
-# Приватный домен стенда по умолчанию должен оставаться mdp; старые *.local шаблоны не должны возвращаться.
+# Публичный профиль не должен возвращаться к старым локальным доменным шаблонам.
 if command -v rg >/dev/null 2>&1; then
   if rg -n "lab\\.local|stage\\.local|aws-stage\\.local" README.md docs kubernetes ci tests environments terraform ansible; then
-    echo "Найдены устаревшие приватные домены. Используйте mdp или APP_DOMAIN/domain_name overrides." >&2
+    echo "Найдены устаревшие приватные домены. Используйте публичный APP_DOMAIN/domain_name." >&2
     exit 1
   fi
   if rg -n "\\*join-command|join-command\\.sh" ci/templates; then

@@ -35,6 +35,10 @@ require_file() {
   [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
 }
 
+is_placeholder() {
+  [[ "${1:-}" == REPLACE_WITH_* ]]
+}
+
 find_toolbox_pod() {
   local pod
   pod=$(kubectl -n "$GITLAB_NAMESPACE" get pods \
@@ -55,7 +59,7 @@ find_toolbox_pod() {
 }
 
 resolve_registry_password() {
-  if [[ -n "${REGISTRY_PASSWORD:-}" ]]; then
+  if [[ -n "${REGISTRY_PASSWORD:-}" ]] && ! is_placeholder "$REGISTRY_PASSWORD"; then
     printf '%s' "$REGISTRY_PASSWORD"
     return
   fi
@@ -120,6 +124,10 @@ EOF
 
 require_command kubectl
 require_file "$KUBECONFIG"
+
+if is_placeholder "$REGISTRY_USER"; then
+  REGISTRY_USER=root
+fi
 
 "$(dirname "$0")/prepare-gitlab-registry-projects.sh" "$ENV_NAME"
 

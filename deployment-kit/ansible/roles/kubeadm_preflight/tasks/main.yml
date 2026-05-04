@@ -46,7 +46,7 @@
 - name: Проверка семейства ОС
   assert:
     that:
-      - ansible_os_family == "Debian"
+      - ansible_facts["os_family"] == "Debian"
     fail_msg: "Текущие роли рассчитаны на Debian/Ubuntu узлы."
 
 - name: Проверка отключенного swap

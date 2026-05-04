@@ -38,7 +38,7 @@ expect_success "ingress namespace sees frontend /health" \
 
 expect_success "gateway creates and reads demo lead" \
   app \
-  "app.kubernetes.io/name=gateway,dk-test=integration" \
+  "app.kubernetes.io/name=frontend,dk-test=integration" \
   "created=\$(curl -fsS -H 'content-type: application/json' -d '{\"name\":\"Gateway Test Lead\",\"company\":\"Deployment Kit\",\"status\":\"qualified\",\"budget\":50000}' http://gateway.app.svc.cluster.local:8080/leads); id=\$(printf '%s' \"\$created\" | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p'); test -n \"\$id\"; curl -fsS http://gateway.app.svc.cluster.local:8080/leads/\"\$id\" | grep -q 'Gateway Test Lead'"
 
 expect_success "frontend proxy creates and reads demo lead" \

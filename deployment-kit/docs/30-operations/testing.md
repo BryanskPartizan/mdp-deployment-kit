@@ -2,7 +2,7 @@
 
 Deployment kit включает несколько категорий проверок, разделённых по риску и назначению.
 
-Полная последовательность запуска проверок после развертывания стенда описана в `docs/runbook.md`.
+Полная последовательность запуска проверок после развертывания стенда описана в `docs/20-runbook/runbook.md`.
 
 ## Статическая проверка
 До live-запуска проверяется формат Terraform, shell syntax, Helm rendering, Grafana dashboard JSON, Ansible syntax и Terraform validate, включая `terraform/edge`.
@@ -15,7 +15,7 @@ make validate ENV=vm-dev
 ## Smoke-тестирование
 Подтверждает доступность endpoint, публикацию через ingress и работу базовых health-check маршрутов.
 
-По умолчанию внешние проверки используют публичный домен `pkhco.ru`. Если стенд опубликован на другом домене или временно возвращён к приватному `mdp`, задайте `APP_DOMAIN=<domain>` либо точечные переменные `SMOKE_FRONTEND_HOST`, `SMOKE_GATEWAY_HOST`, `GITLAB_HOST`, `GITLAB_REGISTRY_HOST`.
+По умолчанию внешние проверки используют публичный домен `pkhco.ru`. Если стенд опубликован на другом публичном домене, задайте `APP_DOMAIN=<domain>` либо точечные переменные `SMOKE_FRONTEND_HOST`, `SMOKE_GATEWAY_HOST`, `GITLAB_HOST`, `GITLAB_REGISTRY_HOST`.
 
 Запуск:
 ```bash

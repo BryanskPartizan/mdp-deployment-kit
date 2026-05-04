@@ -5,10 +5,10 @@ KUBECONFIG ?= $(ARTIFACTS_DIR)/admin.conf
 
 export KUBECONFIG
 
-.PHONY: help validate infra-plan infra-apply infra-destroy destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps configure-docker-registry-trust configure-docker-insecure-registry docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
+.PHONY: help validate infra-plan infra-apply infra-destroy destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node render-inventory package
 
 help:
-	@echo "Targets: validate infra-plan infra-apply infra-destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps configure-docker-registry-trust configure-docker-insecure-registry docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
+	@echo "Targets: validate infra-plan infra-apply infra-destroy edge-plan edge-apply edge-destroy kubeadm-bootstrap kubeadm-reset deploy-vault vault-init vault-token vault-admin-token vault-configure deploy-platform deploy-gitlab prepare-gitlab-registry-projects bootstrap-gitlab-app-ci deploy-app-charts deploy-apps docker-registry-login build-stub-images test-stubs test-smoke test-network test-security test-integration test-storage test-gitlab test-resilience test-all test-load test-fail-node package"
 
 validate:
 	./ci/scripts/validate-static.sh
@@ -71,12 +71,6 @@ deploy-app-charts:
 
 deploy-apps:
 	./ci/scripts/deploy-apps.sh $(ENV)
-
-configure-docker-registry-trust:
-	./ci/scripts/configure-docker-registry-trust.sh $(ENV)
-
-configure-docker-insecure-registry:
-	./ci/scripts/configure-docker-insecure-registry.sh
 
 docker-registry-login:
 	./ci/scripts/docker-registry-login.sh $(ENV)

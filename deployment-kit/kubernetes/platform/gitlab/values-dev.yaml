@@ -1,7 +1,7 @@
 # dev-профиль уменьшает ресурсы GitLab для демонстрационного стенда.
 global:
   hosts:
-    domain: mdp
+    domain: pkhco.ru
 
 gitlab:
   webservice:
@@ -37,4 +37,3 @@ redis:
 minio:
   persistence:
     size: 5Gi
-

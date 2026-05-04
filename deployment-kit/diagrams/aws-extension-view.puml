@@ -1,4 +1,15 @@
 @startuml
 title Направление расширения под AWS
 skinparam shadowing false
+left to right direction
+
+rectangle "Общая модель deployment-kit\nAnsible kubeadm, Helm charts,\nVault, GitLab, tests" as common
+rectangle "Yandex Cloud provider\nterraform/vm" as yc
+rectangle "AWS provider template\nterraform/aws" as aws
+rectangle "Provider-specific edge\nDNS, LB, security groups" as edge
+
+common --> yc
+common --> aws
+yc --> edge
+aws --> edge
 @enduml

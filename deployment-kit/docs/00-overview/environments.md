@@ -5,7 +5,7 @@
 ## vm-dev
 Основное демонстрационное окружение, используемое для практической части ВКР.
 В `terraform.tfvars` задаются CIDR-доступы для SSH, Kubernetes API и внешнего ingress, а также NodePort ingress-nginx `30080/30443`.
-В `ansible-vars.yml` закреплена версия Flannel manifest, чтобы CNI не зависел от изменяемой ветки `master`.
+В `ansible-vars.yml` закреплены параметры Calico, чтобы CNI поддерживал enforcement стандартных Kubernetes `NetworkPolicy`.
 
 ## vm-stage
 Стендовое VM-окружение с увеличенными параметрами и stage-специфичными доменными именами.

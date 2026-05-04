@@ -54,6 +54,33 @@ prometheus:
           resources:
             requests:
               storage: 8Gi
+    additionalScrapeConfigs:
+      # kubeadm разворачивает etcd как static pods без Kubernetes Service.
+      # Scrape настраивается через pod discovery и порт метрик 2381, который открывает kubeadm template.
+      - job_name: kube-etcd
+        scheme: http
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - kube-system
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_label_component]
+            regex: etcd
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: ${1}:2381
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - action: replace
+            target_label: namespace
+            replacement: kube-system
 kubeStateMetrics:
   enabled: true
 nodeExporter:

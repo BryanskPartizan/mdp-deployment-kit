@@ -155,7 +155,7 @@ variable "cdn_origin_hostname" {
 }
 
 variable "cdn_origin_protocol" {
-  description = "Протокол CDN -> origin. Для self-signed ingress безопаснее http; для публичного TLS можно https."
+  description = "Протокол CDN -> origin. По умолчанию используется http; https допустим только при валидном production TLS на origin."
   type        = string
   default     = "http"
 

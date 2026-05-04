@@ -7,8 +7,12 @@ kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --ti
 kubectl -n cert-manager rollout status deployment/cert-manager --timeout=300s
 kubectl -n cert-manager rollout status deployment/cert-manager-cainjector --timeout=300s
 kubectl -n cert-manager rollout status deployment/cert-manager-webhook --timeout=300s
-kubectl wait --for=condition=Ready clusterissuer/selfsigned-bootstrap --timeout=300s
-kubectl wait --for=condition=Ready clusterissuer/test-selfsigned --timeout=300s
+kubectl wait --for=condition=Ready clusterissuer/letsencrypt-prod --timeout=300s
+
+if kubectl get clusterissuer -o name | grep -Eq 'clusterissuer/(selfsigned-bootstrap|test-selfsigned|letsencrypt-staging)$'; then
+  echo "Найдены запрещенные non-prod ClusterIssuer. В публичном профиле должен остаться только letsencrypt-prod." >&2
+  exit 1
+fi
 
 kubectl -n kube-system rollout status deployment/metrics-server --timeout=300s
 kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' | grep -qx "True"
@@ -30,3 +34,4 @@ kubectl get clusterrole deployment-kit-alloy
 kubectl -n observability get prometheusrule deployment-kit-platform-alerts
 kubectl -n observability get configmap deployment-kit-grafana-dashboards
 kubectl -n observability get configmap deployment-kit-grafana-dashboards -o jsonpath='{.data.datastores\.json}' | grep -q "Redis and PostgreSQL"
+kubectl -n observability get configmap deployment-kit-grafana-dashboards -o jsonpath='{.data.etcd\.json}' | grep -q "kube-etcd"

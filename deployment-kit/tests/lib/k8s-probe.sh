@@ -24,17 +24,49 @@ run_probe() {
   local labels="$2"
   local command="$3"
   local name
+  local phase=""
+  local timeout_seconds="${TEST_POD_TIMEOUT%s}"
+  local deadline
 
   name=$(probe_name)
+
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=180
+  fi
+
   kubectl -n "$namespace" run "$name" \
     --image="$TEST_IMAGE" \
     --restart=Never \
     --labels="$labels" \
-    --pod-running-timeout="$TEST_POD_TIMEOUT" \
-    --rm \
-    -i \
-    --attach \
-    --command -- sh -ec "$command"
+    --command -- sh -ec "$command" >/dev/null
+
+  deadline=$((SECONDS + timeout_seconds))
+  while (( SECONDS < deadline )); do
+    phase=$(kubectl -n "$namespace" get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    case "$phase" in
+      Succeeded|Failed)
+        break
+        ;;
+    esac
+    sleep 1
+  done
+
+  kubectl -n "$namespace" logs "$name" --all-containers=true 2>/dev/null || true
+  kubectl -n "$namespace" delete pod "$name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+
+  case "$phase" in
+    Succeeded)
+      return 0
+      ;;
+    Failed)
+      return 1
+      ;;
+    *)
+      echo "Диагностический Pod ${namespace}/${name} не завершился за ${timeout_seconds}s, текущая phase=${phase:-unknown}." >&2
+      kubectl -n "$namespace" describe pod "$name" >&2 || true
+      return 2
+      ;;
+  esac
 }
 
 expect_success() {
@@ -63,14 +95,13 @@ expect_failure() {
 
   echo "$output"
 
-  # Маркер защищает от ложноположительного результата, когда Pod вообще не стартовал.
-  if ! grep -q "PROBE_STARTED" <<<"$output"; then
-    echo "Диагностический Pod не стартовал, результат запрета недостоверен." >&2
+  if [[ "$exit_code" -eq 0 ]]; then
+    echo "Ожидался запрет, но команда завершилась успешно: $title" >&2
     exit 1
   fi
 
-  if [[ "$exit_code" -eq 0 ]]; then
-    echo "Ожидался запрет, но команда завершилась успешно: $title" >&2
+  if [[ "$exit_code" -ne 1 ]]; then
+    echo "Диагностический Pod не завершился ожидаемой ошибкой, результат запрета недостоверен." >&2
     exit 1
   fi
 }
