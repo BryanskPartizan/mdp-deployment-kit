@@ -124,21 +124,6 @@ Initializing provider plugins...
 Terraform has been successfully initialized!
 ```
 
-Во время refresh Terraform обнаружил, что часть ресурсов была удалена вне Terraform, и пересоздал
-нужные объекты:
-
-```text
-Note: Objects have changed outside of Terraform
-
-Terraform detected the following changes made outside of Terraform since the last "terraform apply":
-
-  # module.network.yandex_vpc_subnet.this has been deleted
-  - resource "yandex_vpc_subnet" "this" {
-      - id = "e9ba0m7v2v3ockvbqdl7" -> null
-        name = "mdp-k8s-dev-subnet"
-    }
-```
-
 Фактическое создание ресурсов:
 
 ```text
