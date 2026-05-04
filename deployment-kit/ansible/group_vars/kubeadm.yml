@@ -4,3 +4,6 @@ pod_subnet: 10.244.0.0/16
 service_subnet: 10.96.0.0/12
 control_plane_endpoint: "{{ control_plane_vip }}:6443"
 kubeadm_upload_certs: true
+kubeadm_api_server_extra_sans: []
+# Полная очистка iptables выключена по умолчанию: она может снести host-level firewall вне Kubernetes.
+kubeadm_reset_flush_iptables: false

@@ -1,0 +1,150 @@
+# Alloy собирает Pod logs через Kubernetes API без hostPath/privileged доступа.
+crds:
+  create: false
+
+alloy:
+  enableReporting: false
+  storagePath: /tmp/alloy
+  configMap:
+    content: |-
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+      discovery.kubernetes "pod" {
+        role = "pod"
+
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+        }
+      }
+
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pod.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          action        = "replace"
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          action        = "replace"
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "container"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          action        = "replace"
+          target_label  = "node"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          action        = "replace"
+          target_label  = "app"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "job"
+          separator     = "/"
+          replacement   = "$1"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_id"]
+          action        = "replace"
+          target_label  = "container_runtime"
+          regex         = `^(\S+):\/\/.+$`
+          replacement   = "$1"
+        }
+      }
+
+      loki.source.kubernetes "pod_logs" {
+        targets    = discovery.relabel.pod_logs.output
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+
+      loki.process "pod_logs" {
+        stage.static_labels {
+          values = {
+            cluster = "deployment-kit",
+          }
+        }
+
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.source.kubernetes_events "cluster_events" {
+        job_name   = "integrations/kubernetes/eventhandler"
+        log_format = "logfmt"
+        forward_to = [loki.process.cluster_events.receiver]
+      }
+
+      loki.process "cluster_events" {
+        stage.static_labels {
+          values = {
+            cluster = "deployment-kit",
+          }
+        }
+
+        stage.labels {
+          values = {
+            kubernetes_cluster_events = "job",
+          }
+        }
+
+        forward_to = [loki.write.default.receiver]
+      }
+  mounts:
+    varlog: false
+    dockercontainers: false
+  securityContext:
+    runAsUser: 473
+    runAsGroup: 473
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+rbac:
+  create: false
+
+serviceAccount:
+  create: false
+  name: alloy
+
+controller:
+  type: daemonset
+  tolerations:
+    - operator: Exists
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    deployment-kit/component: alloy

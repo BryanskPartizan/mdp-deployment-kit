@@ -1,0 +1,156 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: deployment-kit-platform-alerts
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: deployment-kit-observability
+    role: alert-rules
+spec:
+  groups:
+    - name: deployment-kit.cluster
+      rules:
+        - alert: DeploymentKitNodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Kubernetes node is not Ready"
+            description: "Node {{ $labels.node }} has not been Ready for more than 5 minutes."
+        - alert: DeploymentKitHighClusterCpuUsage
+          expr: 100 * sum(rate(container_cpu_usage_seconds_total{container!="",pod!=""}[5m])) / sum(machine_cpu_cores) > 80
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cluster CPU usage is high"
+            description: "Cluster CPU usage is above 80% for 15 minutes."
+        - alert: DeploymentKitHighClusterMemoryUsage
+          expr: 100 * sum(container_memory_working_set_bytes{container!="",pod!=""}) / sum(machine_memory_bytes) > 85
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cluster memory usage is high"
+            description: "Cluster memory usage is above 85% for 15 minutes."
+    - name: deployment-kit.applications
+      rules:
+        - alert: DeploymentKitAppDeploymentReplicasMissing
+          expr: kube_deployment_status_replicas_available{namespace="app"} < kube_deployment_spec_replicas{namespace="app"}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Application deployment has unavailable replicas"
+            description: "Deployment app/{{ $labels.deployment }} has fewer available replicas than expected."
+        - alert: DeploymentKitPodCrashLoop
+          expr: max_over_time(kube_pod_container_status_waiting_reason{namespace=~"app|devops|observability|security",reason="CrashLoopBackOff"}[5m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod is in CrashLoopBackOff"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is in CrashLoopBackOff."
+        - alert: DeploymentKitContainerRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace=~"app|devops|observability|security"}[15m]) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container restarts detected"
+            description: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} restarted more than twice in 15 minutes."
+        - alert: DeploymentKitIngress5xx
+          expr: sum by (exported_namespace, ingress) (rate(nginx_ingress_controller_requests{status=~"5.."}[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Ingress returns 5xx responses"
+            description: "Ingress {{ $labels.exported_namespace }}/{{ $labels.ingress }} returns 5xx responses."
+    - name: deployment-kit.endpoints
+      rules:
+        - alert: DeploymentKitEndpointDown
+          expr: probe_success == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Endpoint probe failed"
+            description: "Endpoint {{ $labels.endpoint }} {{ $labels.instance }} has failed blackbox checks for more than 2 minutes."
+        - alert: DeploymentKitEndpointSlow
+          expr: probe_duration_seconds > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Endpoint probe is slow"
+            description: "Endpoint {{ $labels.endpoint }} {{ $labels.instance }} responds slower than 2 seconds."
+        - alert: DeploymentKitCertificateExpiresSoon
+          expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TLS certificate expires soon"
+            description: "TLS certificate for {{ $labels.instance }} expires in less than 14 days."
+    - name: deployment-kit.platform
+      rules:
+        - alert: DeploymentKitVaultReplicasMissing
+          expr: kube_statefulset_status_replicas_ready{namespace="security",statefulset="vault"} < 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Vault has unavailable replicas"
+            description: "Vault has fewer than 3 ready replicas."
+        - alert: DeploymentKitGitLabReplicasMissing
+          expr: sum(kube_deployment_status_replicas_available{namespace="devops"}) < sum(kube_deployment_spec_replicas{namespace="devops"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitLab deployment replicas are unavailable"
+            description: "One or more GitLab deployments have fewer available replicas than expected."
+        - alert: DeploymentKitPVCFillingUp
+          expr: kubelet_volume_stats_capacity_bytes > 0 and kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes < 0.15
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC free space is low"
+            description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less than 15% free space."
+    - name: deployment-kit.datastores
+      rules:
+        - alert: DeploymentKitPostgresUnavailable
+          expr: kube_statefulset_status_replicas_ready{namespace="app",statefulset="postgres-postgresql"} < 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL is unavailable"
+            description: "StatefulSet app/postgres-postgresql has no ready replicas."
+        - alert: DeploymentKitRedisUnavailable
+          expr: kube_statefulset_status_replicas_ready{namespace="app",statefulset="redis-master"} < 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis is unavailable"
+            description: "StatefulSet app/redis-master has no ready replicas."
+        - alert: DeploymentKitDatastoreProbeDown
+          expr: probe_success{component=~"postgres|redis"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Datastore TCP probe failed"
+            description: "Datastore probe {{ $labels.endpoint }} has failed for more than 2 minutes."
+        - alert: DeploymentKitDatastorePVCFillingUp
+          expr: kubelet_volume_stats_capacity_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} > 0 and kubelet_volume_stats_available_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} / kubelet_volume_stats_capacity_bytes{namespace="app",persistentvolumeclaim=~"data-postgres-postgresql-0|redis-data-redis-master-0"} < 0.2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Datastore PVC free space is low"
+            description: "Datastore PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less than 20% free space."

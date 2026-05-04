@@ -2,12 +2,12 @@
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 localAPIEndpoint:
-  advertiseAddress: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+  advertiseAddress: {{ hostvars[inventory_hostname].node_ip | default(ansible_facts["default_ipv4"]["address"]) }}
   bindPort: 6443
 nodeRegistration:
   criSocket: unix:///run/containerd/containerd.sock
   kubeletExtraArgs:
-    node-ip: {{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}
+    node-ip: {{ hostvars[inventory_hostname].node_ip | default(ansible_facts["default_ipv4"]["address"]) }}
 ---
 # Шаблон определяет параметры инициализации первого control-plane узла.
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -18,9 +18,24 @@ controlPlaneEndpoint: {{ control_plane_endpoint }}
 networking:
   podSubnet: {{ pod_subnet }}
   serviceSubnet: {{ service_subnet }}
+etcd:
+  local:
+    extraArgs:
+      # Метрики etcd публикуются на node_ip, чтобы Prometheus мог скрейпить kubeadm static pods.
+      listen-metrics-urls: http://0.0.0.0:2381
 apiServer:
   certSANs:
-    - "{{ control_plane_endpoint.split(':')[0] }}"
-    - "{{ hostvars[inventory_hostname].node_ip | default(ansible_default_ipv4.address) }}"
+{% set cert_sans = [control_plane_endpoint.split(':')[0]] %}
+{% for host in groups['control_plane'] | default([]) %}
+{% set _ = cert_sans.append(hostvars[host].node_ip | default(hostvars[host].ansible_host | default(host))) %}
+{% set _ = cert_sans.append(hostvars[host].ansible_host | default('')) %}
+{% set _ = cert_sans.append(hostvars[host].inventory_hostname | default(host)) %}
+{% endfor %}
+{% for san in kubeadm_api_server_extra_sans | default([]) %}
+{% set _ = cert_sans.append(san) %}
+{% endfor %}
+{% for san in cert_sans | reject('equalto', '') | unique %}
+    - "{{ san }}"
+{% endfor %}
 controllerManager: {}
 scheduler: {}

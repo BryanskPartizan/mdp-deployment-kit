@@ -4,7 +4,8 @@ kind: Ingress
 metadata:
   name: {{ .Chart.Name }}
   annotations:
-    cert-manager.io/cluster-issuer: test-selfsigned
+    # Издатель сертификата задаётся через values; публичный профиль допускает только letsencrypt-prod.
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:

@@ -1,9 +1,9 @@
 gateway:
-  host: gateway.stage.local
+  host: gateway.pkhco.ru
 api:
   replicas: 2
 frontend:
-  host: app.stage.local
+  host: app.pkhco.ru
 postgres:
   auth:
     database: appdb

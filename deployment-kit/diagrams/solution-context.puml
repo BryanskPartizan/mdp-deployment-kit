@@ -1,4 +1,32 @@
 @startuml
-title Контекст решения
+title Контекст решения deployment-kit
+left to right direction
 skinparam shadowing false
+
+actor "Инженер" as engineer
+cloud "Yandex Cloud" as yc
+cloud "Cloudflare DNS only\npkhco.ru" as cf
+rectangle "Terraform" as tf
+rectangle "Ansible + kubeadm" as ansible
+rectangle "Kubernetes HA cluster" as k8s
+rectangle "Platform services\nIngress, cert-manager, monitoring, logs" as platform
+rectangle "Vault HA" as vault
+rectangle "GitLab + Registry + Runner" as gitlab
+rectangle "App contour\nAPI, Gateway, Frontend" as apps
+database "PostgreSQL + Redis" as data
+
+engineer --> yc
+engineer --> tf
+engineer --> ansible
+engineer --> gitlab
+cf --> platform
+tf --> yc
+tf --> ansible
+ansible --> k8s
+k8s --> platform
+platform --> vault
+platform --> gitlab
+gitlab --> apps
+apps --> data
+apps --> vault
 @enduml

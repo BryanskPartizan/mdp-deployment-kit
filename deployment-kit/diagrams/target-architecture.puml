@@ -1,17 +1,45 @@
 @startuml
-title Целевая архитектура
+title Целевая архитектура deployment-kit
 left to right direction
-actor Пользователь as user
-rectangle "Ingress" as ing
+skinparam shadowing false
+
+actor "Пользователь" as user
+cloud "Cloudflare DNS only\npkhco.ru" as dns
+rectangle "Yandex NLB\n80/443" as nlb_ing
+rectangle "Yandex NLB\n6443" as nlb_api
+
+node "Control plane x3\nkube-apiserver, scheduler,\ncontroller-manager, etcd" as cp
+node "Worker x2\napplication workloads" as workers
+
+rectangle "ingress-nginx" as ingress
+rectangle "cert-manager\nletsencrypt-prod" as cert
+rectangle "Grafana / Prometheus\nLoki / Alloy / Blackbox" as obs
+rectangle "Vault HA" as vault
+rectangle "GitLab + Registry + Runner" as gitlab
+rectangle "Frontend" as fe
 rectangle "Gateway" as gw
 rectangle "API" as api
 database "PostgreSQL" as pg
-rectangle "Redis" as redis
-cloud "Контур наблюдаемости
-Prometheus/Grafana/Loki" as obs
-user --> ing --> gw --> api
+database "Redis" as redis
+
+user --> dns
+dns --> nlb_ing
+nlb_ing --> workers
+nlb_api --> cp
+workers --> ingress
+ingress --> fe
+ingress --> gw
+ingress --> gitlab
+ingress --> obs
+ingress --> vault
+cert --> ingress
+fe --> gw
+gw --> api
 api --> pg
 api --> redis
-obs --> gw
+api --> vault
+obs --> cp
+obs --> workers
 obs --> api
+obs --> gitlab
 @enduml

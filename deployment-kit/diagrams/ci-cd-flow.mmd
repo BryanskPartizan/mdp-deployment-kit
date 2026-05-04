@@ -1,0 +1,11 @@
+flowchart LR
+  dev[Разработчик] --> git[GitLab project platform/deployment-kit]
+  git --> pipe[GitLab CI pipeline]
+  pipe --> validate[validate: lint, syntax, tests]
+  pipe --> build[build: API, Gateway, Frontend]
+  build --> registry[GitLab Container Registry]
+  pipe --> deploy[deploy: Helm upgrade]
+  registry --> deploy
+  deploy --> k8s[Kubernetes app namespace]
+  k8s --> smoke[post-deploy tests]
+  smoke --> reports[JSON/HTML reports]

@@ -1,6 +1,80 @@
-# Файл описывает CI/CD-конвейер для соответствующего контура решения.
+# Файл описывает CI/CD-конвейер приложения, которое деплоится в deployment-kit.
+# Шаблон предполагает, что приложение живёт в отдельном репозитории и передаёт имя chart'а через APP_NAME.
 stages:
+  - validate
   - build
-  - push
+  - scan
   - deploy
   - test
+
+variables:
+  ENV: "vm-dev"
+  APP_NAME: "$CI_PROJECT_NAME"
+  APP_NAMESPACE: "app"
+  DOCKERFILE_PATH: "Dockerfile"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  IMAGE_REPOSITORY: "$CI_REGISTRY_IMAGE"
+  HELM_CHART_PATH: "deployment-kit/kubernetes/apps/$APP_NAME"
+  HELM_VALUES_FILE: "deployment-kit/kubernetes/apps/$APP_NAME/values-dev.yaml"
+  KANIKO_IMAGE: "gcr.io/kaniko-project/executor:v1.24.0-debug"
+  TRIVY_IMAGE: "aquasec/trivy:0.58.2"
+  HELM_KUBECTL_IMAGE: "dtzar/helm-kubectl:3.16.3"
+
+default:
+  before_script:
+    - test -n "$APP_NAME"
+
+validate:
+  stage: validate
+  image: alpine:3.21
+  script:
+    - test -f "$DOCKERFILE_PATH"
+    - test -d "$HELM_CHART_PATH"
+
+build_image:
+  stage: build
+  image:
+    name: "$KANIKO_IMAGE"
+    entrypoint: [""]
+  script:
+    # Kaniko получает Docker auth из защищённых переменных GitLab CI.
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/$DOCKERFILE_PATH" --destination "$IMAGE_REPOSITORY:$IMAGE_TAG" --destination "$IMAGE_REPOSITORY:$CI_COMMIT_REF_SLUG"
+
+scan_image:
+  stage: scan
+  image:
+    name: "$TRIVY_IMAGE"
+    entrypoint: [""]
+  script:
+    # SBOM сохраняется как артефакт, чтобы можно было сверять состав образа между релизами.
+    - trivy image --format cyclonedx --output sbom.cdx.json "$IMAGE_REPOSITORY:$IMAGE_TAG"
+    # Уязвимости уровня HIGH/CRITICAL блокируют продвижение образа до deploy.
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$IMAGE_REPOSITORY:$IMAGE_TAG"
+  artifacts:
+    access: developer
+    paths:
+      - sbom.cdx.json
+    expire_in: 1 week
+
+deploy:
+  stage: deploy
+  image: "$HELM_KUBECTL_IMAGE"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+    - when: never
+  script:
+    - test -n "$KUBECONFIG_B64"
+    - echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG="$CI_PROJECT_DIR/kubeconfig"
+    - helm upgrade --install "$APP_NAME" "$HELM_CHART_PATH" --namespace "$APP_NAMESPACE" --wait --timeout 10m -f "$HELM_VALUES_FILE" --set-string "image.repository=$IMAGE_REPOSITORY" --set-string "image.tag=$IMAGE_TAG"
+
+smoke:
+  stage: test
+  image: curlimages/curl:8.11.1
+  rules:
+    - if: '$SMOKE_URL'
+  script:
+    - curl -fsS "$SMOKE_URL"

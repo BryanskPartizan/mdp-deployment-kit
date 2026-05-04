@@ -49,6 +49,12 @@ server:
     type: ClusterIP
   ingress:
     enabled: false
+  # В vm-dev сейчас 2 worker-узла, а Vault HA требует 3 replica с hard anti-affinity.
+  # Toleration разрешает третьей replica сесть на control-plane; для production лучше добавить третий worker.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
 
 ui:
   enabled: true
@@ -57,4 +63,3 @@ ui:
 injector:
   enabled: true
   replicas: 2
-

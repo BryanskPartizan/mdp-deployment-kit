@@ -1,0 +1,30 @@
+sequenceDiagram
+  participant U as Инженер
+  participant YC as Yandex Cloud
+  participant TF as Terraform
+  participant AN as Ansible
+  participant K as Kubernetes
+  participant P as Platform
+  participant V as Vault
+  participant G as GitLab
+  participant A as Apps
+  participant T as Tests
+
+  U->>YC: подготовка folder, SA, IAM, quotas
+  U->>TF: make infra-plan / infra-apply
+  TF->>YC: VM, VPC, SG, NLB
+  TF->>AN: inventory и artifacts
+  U->>TF: make edge-apply
+  TF->>YC: DNS metadata / Cloudflare records
+  U->>AN: make kubeadm-bootstrap
+  AN->>K: kubeadm init/join, Calico, kubeconfig
+  U->>P: make deploy-platform
+  P->>K: ingress, cert-manager, monitoring, logging
+  U->>V: make deploy-vault / vault-init / vault-configure
+  V->>K: Vault HA, Kubernetes auth, policies
+  U->>G: make deploy-gitlab
+  G->>K: GitLab, Registry, Runner
+  U->>A: build images / deploy-apps
+  A->>K: Helm releases, NetworkPolicy, backup
+  U->>T: test suites
+  T->>K: smoke, network, security, integration, storage, resilience, load

@@ -1,7 +1,7 @@
 replicaCount: 2
 image:
-  repository: registry.lab.local/platform/gateway
-  tag: "0.1.0"
+  repository: registry.pkhco.ru/platform/gateway
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
@@ -9,6 +9,18 @@ service:
 serviceAccount:
   create: true
   name: gateway
+  # Vault Agent использует ServiceAccount JWT для Kubernetes auth; отключать токен можно только после смены auth-модели.
+  automountToken: true
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 resources:
   requests:
     cpu: 100m
@@ -21,10 +33,48 @@ hpa:
   minReplicas: 2
   maxReplicas: 5
   targetCPUUtilizationPercentage: 60
+pdb:
+  enabled: true
+  minAvailable: 1
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+networkPolicy:
+  enabled: true
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: security
+      ports:
+        - protocol: TCP
+          port: 8200
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      ports:
+        - protocol: TCP
+          port: 8081
 ingress:
   enabled: true
   className: nginx
-  host: gateway.lab.local
+  clusterIssuer: letsencrypt-prod
+  host: gateway.pkhco.ru
   tlsSecretName: gateway-tls
 config:
   ENVIRONMENT: dev

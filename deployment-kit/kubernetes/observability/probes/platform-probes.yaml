@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: deployment-kit-platform-probes
+  namespace: observability
+  labels:
+    deployment-kit/component: endpoint-probe
+    deployment-kit/scope: platform
+spec:
+  jobLabel: blackbox-exporter
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-blackbox-exporter
+      app.kubernetes.io/instance: blackbox-exporter
+  namespaceSelector:
+    matchNames:
+      - observability
+  endpoints:
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx
+        target:
+          - http://vault.security.svc.cluster.local:8200/v1/sys/health?standbyok=true
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: vault-health
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: vault
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: vault-health
+          action: replace

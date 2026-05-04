@@ -2,7 +2,7 @@
 - name: Label worker nodes for application workloads
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  command: kubectl label node {{ item }} node-role.kubernetes.io/worker=worker --overwrite
+  command: kubectl label node {{ hostvars[item].fqdn | default(item) }} node-role.kubernetes.io/worker=worker --overwrite
   loop: "{{ groups['workers'] | default([]) }}"
   changed_when: false
 
@@ -37,10 +37,10 @@
   command: >
     kubectl -n kube-system exec {{ etcd_probe_pod.stdout }} --
     sh -ec 'ETCDCTL_API=3 etcdctl
-    --endpoints={{ groups["control_plane"] | map("extract", hostvars, "node_ip") | map("regex_replace", "^(.*)$", "https://\\1:2379") | join(",") }}
+    --endpoints={% for host in groups["control_plane"] | default([]) %}https://{{ hostvars[host].node_ip }}:2379{% if not loop.last %},{% endif %}{% endfor %}
     --cacert=/etc/kubernetes/pki/etcd/ca.crt
-    --cert=/etc/kubernetes/pki/etcd/server.crt
-    --key=/etc/kubernetes/pki/etcd/server.key
+    --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt
+    --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
     endpoint health'
   register: etcd_health
   retries: 5

@@ -1,0 +1,44 @@
+flowchart TB
+  subgraph yc[Yandex Cloud]
+    api_nlb[Yandex NLB: Kubernetes API 6443]
+    ingress_nlb[Yandex NLB: HTTP/HTTPS 80/443]
+    sg[Security Group]
+    subgraph subnet[Subnet 10.10.10.0/24]
+      cp1[mdp-cp-01<br/>control-plane + etcd]
+      cp2[mdp-cp-02<br/>control-plane + etcd]
+      cp3[mdp-cp-03<br/>control-plane + etcd]
+      w1[mdp-worker-01<br/>app workloads]
+      w2[mdp-worker-02<br/>app workloads]
+    end
+  end
+
+  api_nlb --> cp1
+  api_nlb --> cp2
+  api_nlb --> cp3
+  ingress_nlb --> w1
+  ingress_nlb --> w2
+  sg --> cp1
+  sg --> cp2
+  sg --> cp3
+  sg --> w1
+  sg --> w2
+
+  subgraph k8s[Kubernetes namespaces]
+    ingress[ingress-nginx]
+    cert[cert-manager + letsencrypt-prod]
+    obs[observability: Prometheus, Grafana, Loki, Alloy]
+    sec[security: Vault]
+    devops[devops: GitLab, Registry, Runner]
+    ci[ci: GitLab job pods]
+    app[app: API, Gateway, Frontend, PostgreSQL, Redis]
+  end
+
+  w1 --> ingress
+  w2 --> ingress
+  ingress --> app
+  cert --> ingress
+  obs --> app
+  obs --> devops
+  obs --> sec
+  devops --> ci
+  app --> sec

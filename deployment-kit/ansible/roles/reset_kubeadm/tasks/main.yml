@@ -28,6 +28,8 @@
     - /var/lib/kubelet
     - /etc/cni/net.d
     - /var/lib/cni
+    - /var/lib/calico
+    - /var/run/calico
     - /run/flannel
     - /var/run/flannel
 
@@ -36,24 +38,38 @@
   loop:
     - cni0
     - flannel.1
+    - vxlan.calico
+    - tunl0
   register: cni_link_delete
   changed_when: cni_link_delete.rc == 0
   failed_when: false
 
+- name: Удаление Calico workload интерфейсов
+  shell: |
+    ip -o link show | awk -F': ' '/^[0-9]+: cali/ {print $2}' | cut -d@ -f1 | while read -r iface; do
+      ip link delete "$iface" || true
+    done
+  changed_when: false
+  failed_when: false
+
 - name: Очистка iptables filter-таблицы
   command: iptables -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка iptables nat-таблицы
   command: iptables -t nat -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка iptables mangle-таблицы
   command: iptables -t mangle -F
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка пользовательских iptables chains
   command: iptables -X
+  when: kubeadm_reset_flush_iptables | default(false) | bool
   failed_when: false
 
 - name: Очистка IPVS-таблиц при наличии ipvsadm
@@ -82,4 +98,3 @@
     - "{{ cluster_artifacts_dir }}/vault-init.json"
     - "{{ cluster_artifacts_dir }}/vault-kubernetes-ca.crt"
   run_once: true
-

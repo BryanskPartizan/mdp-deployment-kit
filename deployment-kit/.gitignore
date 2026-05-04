@@ -7,6 +7,7 @@ terraform.tfstate.backup
 *.retry
 *.log
 .artifacts/
+.ansible/
 .kube/
 *.tar.gz
 __pycache__/
@@ -14,7 +15,10 @@ __pycache__/
 *.auto.tfvars
 *.auto.tfvars.json
 *.tfvars.local
+.secrets/
+*.key.json
 local.env
 .env
 .env.*
 !.env.example
+../.secrets/final_log

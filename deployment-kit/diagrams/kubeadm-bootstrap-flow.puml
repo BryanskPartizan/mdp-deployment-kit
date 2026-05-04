@@ -1,17 +1,18 @@
 @startuml
 title Поток bootstrap kubeadm-кластера
+skinparam shadowing false
 start
-:Подготовка VM-инфраструктуры;
-:Генерация Ansible inventory;
-:Подготовка операционных систем;
-:Установка контейнерного runtime;
+:Terraform создает VM, сеть, SG и NLB;
+:Terraform формирует inventory и artifacts;
+:Ansible проверяет inventory и доступ по SSH;
+:Подготовка ОС, sysctl, swap, containerd;
 :Установка kubeadm, kubelet, kubectl;
-:Инициализация первого control-plane узла;
-:Подключение остальных control-plane узлов;
-:Подключение worker-узлов;
-:Установка CNI;
-:Экспорт kubeconfig;
-:Развертывание платформенных сервисов;
-:Развертывание прикладного контура;
+:kubeadm init на первом control-plane;
+:Проверка HA endpoint Kubernetes API;
+:Join остальных control-plane;
+:Join worker-узлов;
+:Установка Calico CNI;
+:Экспорт admin.conf;
+:Post-bootstrap проверки CoreDNS, kube-proxy, etcd;
 stop
 @enduml

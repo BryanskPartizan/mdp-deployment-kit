@@ -1,6 +1,8 @@
 # Файл относится к слою конфигурации и bootstrap Kubernetes-кластера.
 - name: Проверка локального каталога артефактов
   delegate_to: localhost
+  # Локальный kubeconfig должен создаваться от имени оператора/CI runner'а.
+  become: false
   file:
     path: "{{ cluster_artifacts_dir }}"
     state: directory

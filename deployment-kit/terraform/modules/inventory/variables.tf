@@ -17,5 +17,9 @@ variable "workers" {
 }
 
 variable "ssh_user" { type = string }
+variable "ssh_private_key_path" {
+  type    = string
+  default = null
+}
 variable "cluster_name" { type = string }
 variable "control_plane_vip" { type = string }

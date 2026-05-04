@@ -1,3 +1,32 @@
+locals {
+  vault_ingress_enabled = trimspace(var.vault_host) != ""
+
+  vault_ingress_values = {
+    server = {
+      ingress = {
+        enabled          = local.vault_ingress_enabled
+        ingressClassName = "nginx"
+        annotations = local.vault_ingress_enabled ? {
+          "cert-manager.io/cluster-issuer"           = var.vault_tls_cluster_issuer
+          "nginx.ingress.kubernetes.io/ssl-redirect" = "true"
+        } : {}
+        hosts = local.vault_ingress_enabled ? [
+          {
+            host  = var.vault_host
+            paths = ["/"]
+          }
+        ] : []
+        tls = local.vault_ingress_enabled ? [
+          {
+            secretName = "vault-tls"
+            hosts      = [var.vault_host]
+          }
+        ] : []
+      }
+    }
+  }
+}
+
 # Namespace создаётся Terraform-кодом, чтобы Vault не зависел от ручного kubectl apply.
 resource "kubernetes_namespace" "security" {
   metadata {
@@ -64,6 +93,7 @@ resource "helm_release" "vault" {
   atomic  = false
 
   values = [
-    file("${path.module}/${var.vault_values_path}")
+    file("${path.module}/${var.vault_values_path}"),
+    yamlencode(local.vault_ingress_values)
   ]
 }

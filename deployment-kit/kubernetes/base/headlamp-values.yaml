@@ -1,0 +1,39 @@
+# Headlamp публикуется только при K8S_ADMIN_ENABLED=true.
+# Для публичного DNS-only стенда доступ дополнительно закрывается basic auth на ingress-nginx.
+replicaCount: 1
+
+config:
+  inCluster: true
+
+# Headlamp получает cluster-admin права только если вы явно включили публикацию K8S_ADMIN_ENABLED=true.
+# Снаружи доступ дополнительно закрывается basic auth на ingress-nginx.
+clusterRoleBinding:
+  create: true
+  clusterRoleName: cluster-admin
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: k8s-admin.pkhco.ru
+      paths:
+        - path: /
+          type: Prefix
+  tls:
+    - secretName: headlamp-tls
+      hosts:
+        - k8s-admin.pkhco.ru
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

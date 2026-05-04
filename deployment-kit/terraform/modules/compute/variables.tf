@@ -18,8 +18,10 @@ variable "control_plane_disk_size_gb" { type = number }
 variable "worker_cores" { type = number }
 variable "worker_memory_gb" { type = number }
 variable "worker_disk_size_gb" { type = number }
-variable "enable_nat" { type = bool }
-variable "preemptible" { type = bool }
+variable "enable_control_plane_nat" { type = bool }
+variable "enable_worker_nat" { type = bool }
+variable "control_plane_preemptible" { type = bool }
+variable "worker_preemptible" { type = bool }
 variable "control_plane_endpoint_ip" {
   type    = string
   default = null

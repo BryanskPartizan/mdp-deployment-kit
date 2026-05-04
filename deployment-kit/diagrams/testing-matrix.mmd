@@ -1,0 +1,18 @@
+flowchart LR
+  deploy[Развернутый стенд] --> smoke[Smoke<br/>узлы, pods, ingress]
+  deploy --> network[Network<br/>разрешенные маршруты]
+  deploy --> security[Security<br/>deny/allow, RBAC]
+  deploy --> integration[Integration<br/>platform, leads flow, Vault]
+  deploy --> storage[Storage<br/>PVC write/read]
+  deploy --> gitlab[GitLab<br/>components and endpoints]
+  deploy --> resilience[Resilience<br/>control-plane health]
+  deploy --> load[Load<br/>k6 gateway ramp]
+
+  smoke --> reports[JSON/HTML reports]
+  network --> reports
+  security --> reports
+  integration --> reports
+  storage --> reports
+  gitlab --> reports
+  resilience --> reports
+  load --> reports

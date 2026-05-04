@@ -20,6 +20,11 @@ expect_success "gateway -> api:8081" \
   "app.kubernetes.io/name=gateway,dk-test=network" \
   "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 api.app.svc.cluster.local 8081"
 
+expect_success "frontend -> gateway:8080" \
+  app \
+  "app.kubernetes.io/name=frontend,dk-test=network" \
+  "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 gateway.app.svc.cluster.local 8080"
+
 expect_success "api -> postgres:5432" \
   app \
   "app.kubernetes.io/name=api,dk-test=network" \
@@ -40,3 +45,17 @@ expect_success "ingress namespace -> gateway:8080" \
   "dk-test=network" \
   "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 gateway.app.svc.cluster.local 8080"
 
+expect_success "observability namespace -> api health port" \
+  observability \
+  "dk-test=network" \
+  "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 api.app.svc.cluster.local 8081"
+
+expect_success "observability namespace -> postgres tcp probe" \
+  observability \
+  "dk-test=network" \
+  "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 postgres-postgresql.app.svc.cluster.local 5432"
+
+expect_success "observability namespace -> redis tcp probe" \
+  observability \
+  "dk-test=network" \
+  "timeout ${TEST_COMMAND_TIMEOUT} nc -zvw3 redis-master.app.svc.cluster.local 6379"

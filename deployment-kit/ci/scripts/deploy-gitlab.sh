@@ -5,16 +5,26 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
 GITLAB_RELEASE=${GITLAB_RELEASE:-gitlab}
 GITLAB_CHART_VERSION=${GITLAB_CHART_VERSION:-9.11.1}
 GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+ROTATE_GITLAB_ROOT_PASSWORD=${ROTATE_GITLAB_ROOT_PASSWORD:-false}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
+
+source "${SCRIPT_DIR}/lib/public-tls.sh"
 
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || { echo "Не найден обязательный файл: $path" >&2; exit 1; }
+}
+
+validate_tls_issuer() {
+  validate_public_tls_inputs
 }
 
 generate_demo_password() {
@@ -69,21 +79,78 @@ resolve_ingress_ip() {
   fi
 }
 
+render_gitlab_probes() {
+  local output
+  output=$(mktemp)
+  # Проверки endpoint'ов хранят публичный профиль pkhco.ru, а при deploy подставляется текущий APP_DOMAIN.
+  sed \
+    -e "s|gitlab\\.pkhco.ru|gitlab.${APP_DOMAIN}|g" \
+    -e "s|registry\\.pkhco.ru|registry.${APP_DOMAIN}|g" \
+    kubernetes/observability/probes/gitlab-probes.yaml > "$output"
+  echo "$output"
+}
+
+render_gitlab_domain_values() {
+  local output
+  output=$(mktemp)
+  # Ключ annotation содержит точку и slash, поэтому надёжнее передавать его values-файлом, а не helm --set.
+  cat > "$output" <<EOF
+global:
+  hosts:
+    domain: ${APP_DOMAIN}
+    gitlab:
+      name: gitlab.${APP_DOMAIN}
+    registry:
+      name: registry.${APP_DOMAIN}
+    minio:
+      name: minio.${APP_DOMAIN}
+  ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: ${TLS_CLUSTER_ISSUER}
+EOF
+  echo "$output"
+}
+
+ensure_gitlab_root_secret() {
+  local password="$1"
+
+  if kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
+    if [[ "$ROTATE_GITLAB_ROOT_PASSWORD" != "true" ]]; then
+      echo "Secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET} уже существует; повторное создание пропущено. Для явной ротации задайте ROTATE_GITLAB_ROOT_PASSWORD=true."
+      return
+    fi
+    # Root password GitLab нельзя неявно пересоздавать: это может разойтись с состоянием БД.
+    kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" >/dev/null
+  fi
+
+  kubectl -n "$GITLAB_NAMESPACE" create secret generic "$GITLAB_ROOT_SECRET" \
+    --from-literal=password="$password" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
 require_file "$KUBECONFIG"
+validate_tls_issuer
+require_prod_cluster_issuer
 require_file kubernetes/platform/gitlab/values.yaml
+require_file kubernetes/observability/probes/gitlab-probes.yaml
 
 kubectl create namespace "$GITLAB_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace ci --dry-run=client -o yaml | kubectl apply -f -
 
 ROOT_PASSWORD=$(resolve_gitlab_root_password)
-kubectl -n "$GITLAB_NAMESPACE" delete secret "$GITLAB_ROOT_SECRET" --ignore-not-found >/dev/null 2>&1 || true
-kubectl -n "$GITLAB_NAMESPACE" create secret generic "$GITLAB_ROOT_SECRET" \
-  --from-literal=password="$ROOT_PASSWORD"
+ensure_gitlab_root_secret "$ROOT_PASSWORD"
+
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-wildcard-tls gitlab-wildcard-tls
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-webservice-tls gitlab-webservice-tls
+delete_tls_artifact_if_not_prod "$GITLAB_NAMESPACE" gitlab-registry-tls gitlab-registry-tls
 
 EXTERNAL_IP=$(resolve_ingress_ip)
 HELM_SET_ARGS=()
 if [[ -n "$EXTERNAL_IP" ]]; then
   HELM_SET_ARGS+=(--set-string "global.hosts.externalIP=${EXTERNAL_IP}")
 fi
+GITLAB_DOMAIN_VALUES_FILE=$(render_gitlab_domain_values)
+trap 'rm -f "$GITLAB_DOMAIN_VALUES_FILE"' EXIT
 
 helm repo add gitlab https://charts.gitlab.io >/dev/null 2>&1 || true
 helm repo update gitlab
@@ -96,7 +163,16 @@ helm upgrade --install "$GITLAB_RELEASE" gitlab/gitlab \
   --timeout 45m \
   -f kubernetes/platform/gitlab/values.yaml \
   -f "$(values_for_env)" \
+  -f "$GITLAB_DOMAIN_VALUES_FILE" \
   "${HELM_SET_ARGS[@]}"
+
+GITLAB_PROBES_FILE=$(render_gitlab_probes)
+trap 'rm -f "$GITLAB_DOMAIN_VALUES_FILE" "$GITLAB_PROBES_FILE"' EXIT
+kubectl apply -f "$GITLAB_PROBES_FILE"
+
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-wildcard-tls 1800s
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-webservice-tls 1800s
+wait_certificate_ready "$GITLAB_NAMESPACE" gitlab-registry-tls 1800s
 
 kubectl -n "$GITLAB_NAMESPACE" get pods,svc,ingress,pvc
 echo "GitLab root password хранится в Kubernetes secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."

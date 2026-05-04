@@ -1,4 +1,10 @@
 @startuml
 title Исходное и целевое состояние
 skinparam shadowing false
+left to right direction
+
+rectangle "Исходное состояние\nручные операции, нет единого runbook,\nнет воспроизводимого HA-кластера" as before
+rectangle "Deployment-kit\nTerraform + Ansible + Helm + tests,\nself-hosted kubeadm HA,\nGitLab CI/CD, Vault, observability" as after
+
+before --> after : стандартизация и автоматизация
 @enduml

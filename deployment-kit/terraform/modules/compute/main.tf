@@ -41,7 +41,7 @@ resource "yandex_compute_instance" "control_plane" {
   }
 
   scheduling_policy {
-    preemptible = var.preemptible
+    preemptible = var.control_plane_preemptible
   }
 
   boot_disk {
@@ -55,7 +55,7 @@ resource "yandex_compute_instance" "control_plane" {
   network_interface {
     subnet_id          = var.subnet_id
     ip_address         = each.value.ip
-    nat                = var.enable_nat
+    nat                = var.enable_control_plane_nat
     security_group_ids = var.security_group_ids
   }
 
@@ -85,7 +85,7 @@ resource "yandex_compute_instance" "worker" {
   }
 
   scheduling_policy {
-    preemptible = var.preemptible
+    preemptible = var.worker_preemptible
   }
 
   boot_disk {
@@ -99,7 +99,7 @@ resource "yandex_compute_instance" "worker" {
   network_interface {
     subnet_id          = var.subnet_id
     ip_address         = each.value.ip
-    nat                = var.enable_nat
+    nat                = var.enable_worker_nat
     security_group_ids = var.security_group_ids
   }
 

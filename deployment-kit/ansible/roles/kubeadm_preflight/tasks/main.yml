@@ -46,7 +46,7 @@
 - name: Проверка семейства ОС
   assert:
     that:
-      - ansible_os_family == "Debian"
+      - ansible_facts["os_family"] == "Debian"
     fail_msg: "Текущие роли рассчитаны на Debian/Ubuntu узлы."
 
 - name: Проверка отключенного swap
@@ -112,4 +112,22 @@
     that:
       - pod_subnet == "10.244.0.0/16"
     fail_msg: "Стандартный manifest Flannel ожидает pod_subnet 10.244.0.0/16. Для другого CIDR нужен отдельный manifest или Helm values."
-  when: "'flannel' in (cni_manifest_url | default(''))"
+  when:
+    - cni_provider | default('calico') != 'calico'
+    - "'flannel' in (cni_manifest_url | default(''))"
+
+- name: Проверка Calico podSubnet
+  assert:
+    that:
+      - pod_subnet is match('^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$')
+    fail_msg: "Для Calico должен быть задан pod_subnet в CIDR-формате."
+  when: cni_provider | default('calico') == 'calico'
+
+- name: Проверка переменных внешнего CNI manifest
+  assert:
+    that:
+      - cni_manifest_url is defined
+      - cni_rollout_namespace is defined
+      - cni_rollout_resource is defined
+    fail_msg: "Для cni_provider != calico задайте cni_manifest_url, cni_rollout_namespace и cni_rollout_resource."
+  when: cni_provider | default('calico') != 'calico'

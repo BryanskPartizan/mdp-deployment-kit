@@ -1,4 +1,13 @@
 @startuml
-title Сценарий отказа при потере узла
+title Сценарий отказа worker-узла
 skinparam shadowing false
+start
+:Один worker становится недоступен;
+:Node condition переходит в NotReady;
+:Deployment/ReplicaSet планирует новые Pod'ы на доступном worker;
+:Ingress NLB продолжает направлять трафик на здоровые targets;
+:Prometheus фиксирует NotReady и рестарты;
+:Grafana/alerts отображают деградацию;
+:После восстановления node возвращается в Ready;
+stop
 @enduml

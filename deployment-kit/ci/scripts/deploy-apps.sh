@@ -5,10 +5,28 @@ set -euo pipefail
 ENV_NAME=${1:-vm-dev}
 ARTIFACTS_DIR=.artifacts/${ENV_NAME}
 export KUBECONFIG=${KUBECONFIG:-${ARTIFACTS_DIR}/admin.conf}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NAMESPACE=${APP_NAMESPACE:-app}
+GITLAB_NAMESPACE=${GITLAB_NAMESPACE:-devops}
+GITLAB_ROOT_SECRET=${GITLAB_ROOT_SECRET:-gitlab-root-password}
 ALLOW_INSECURE_DEMO_SECRETS=${ALLOW_INSECURE_DEMO_SECRETS:-false}
+ROTATE_POSTGRES_SECRET=${ROTATE_POSTGRES_SECRET:-false}
 POSTGRES_CHART_VERSION=${POSTGRES_CHART_VERSION:-18.6.2}
 REDIS_CHART_VERSION=${REDIS_CHART_VERSION:-25.4.1}
+APP_DOMAIN=${APP_DOMAIN:-pkhco.ru}
+TLS_CLUSTER_ISSUER=${TLS_CLUSTER_ISSUER:-letsencrypt-prod}
+IMAGE_REGISTRY=${IMAGE_REGISTRY:-${REGISTRY_SERVER:-registry.${APP_DOMAIN}}}
+IMAGE_TAG=${APP_IMAGE_TAG:-${IMAGE_TAG:-0.2.0}}
+
+source "${SCRIPT_DIR}/lib/public-tls.sh"
+
+validate_tls_issuer() {
+  validate_public_tls_inputs
+}
+
+is_placeholder() {
+  [[ "${1:-}" == REPLACE_WITH_* ]]
+}
 
 secret_or_demo() {
   local var_name="$1"
@@ -30,19 +48,34 @@ secret_or_demo() {
 }
 
 create_registry_secret_if_possible() {
-  local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-}}
-  local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-}}
+  local registry_server=${REGISTRY_SERVER:-${CI_REGISTRY:-registry.${APP_DOMAIN}}}
+  local registry_user=${REGISTRY_USER:-${CI_REGISTRY_USER:-root}}
   local registry_password=${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}
 
-  if [[ -n "$registry_server" && -n "$registry_user" && -n "$registry_password" ]]; then
-    kubectl -n "$NAMESPACE" delete secret gitlab-registry --ignore-not-found >/dev/null 2>&1 || true
-    kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
-      --docker-server="$registry_server" \
-      --docker-username="$registry_user" \
-      --docker-password="$registry_password"
-  else
-    echo "Учетные данные реестра не заданы; предполагается, что secret gitlab-registry уже существует либо используются публичные образы."
+  if is_placeholder "$registry_user"; then
+    registry_user=root
   fi
+
+  if is_placeholder "$registry_password"; then
+    registry_password=""
+  fi
+
+  if [[ -z "$registry_password" ]] && kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" >/dev/null 2>&1; then
+    echo "Пароль registry не задан явно; используем secret ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}."
+    registry_password=$(kubectl -n "$GITLAB_NAMESPACE" get secret "$GITLAB_ROOT_SECRET" -o jsonpath='{.data.password}' | base64 --decode)
+  fi
+
+  if [[ -z "$registry_server" || -z "$registry_user" || -z "$registry_password" ]]; then
+    echo "Не удалось подготовить учетные данные registry. Задайте REGISTRY_SERVER, REGISTRY_USER и REGISTRY_PASSWORD либо убедитесь, что существует ${GITLAB_NAMESPACE}/${GITLAB_ROOT_SECRET}." >&2
+    exit 1
+  fi
+
+  # Секрет registry обновляется через apply, чтобы kubelet не видел временный разрыв между delete/create.
+  kubectl -n "$NAMESPACE" create secret docker-registry gitlab-registry \
+    --docker-server="$registry_server" \
+    --docker-username="$registry_user" \
+    --docker-password="$registry_password" \
+    --dry-run=client -o yaml | kubectl apply -f -
 }
 
 create_postgres_secret() {
@@ -51,15 +84,41 @@ create_postgres_secret() {
   local pg_password
   local pg_admin_password
 
+  if kubectl -n "$NAMESPACE" get secret postgres-auth >/dev/null 2>&1; then
+    if [[ "$ROTATE_POSTGRES_SECRET" != "true" ]]; then
+      echo "Secret ${NAMESPACE}/postgres-auth уже существует; повторное создание пропущено. Для явной ротации задайте ROTATE_POSTGRES_SECRET=true."
+      return
+    fi
+    # Ротация пароля PostgreSQL должна быть осознанной: chart не меняет пароль в уже инициализированной БД автоматически.
+    kubectl -n "$NAMESPACE" delete secret postgres-auth >/dev/null
+  fi
+
   pg_password=$(secret_or_demo POSTGRES_APP_PASSWORD "app-demo-password-change-me")
   pg_admin_password=$(secret_or_demo POSTGRES_ADMIN_PASSWORD "postgres-demo-password-change-me")
 
-  kubectl -n "$NAMESPACE" delete secret postgres-auth --ignore-not-found >/dev/null 2>&1 || true
   kubectl -n "$NAMESPACE" create secret generic postgres-auth \
     --from-literal=postgres-password="$pg_admin_password" \
     --from-literal=password="$pg_password" \
     --from-literal=username="$pg_user" \
-    --from-literal=database="$pg_db"
+    --from-literal=database="$pg_db" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
+check_app_images_if_possible() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Проверка наличия app-образов пропущена: docker CLI недоступен."
+    return 0
+  fi
+
+  local image
+  for app in api gateway frontend; do
+    image="${IMAGE_REGISTRY}/platform/${app}:${IMAGE_TAG}"
+    echo "Проверка наличия образа ${image}."
+    if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+      echo "Образ ${image} не найден или недоступен. Сначала выполните: PUSH_IMAGES=true make build-stub-images" >&2
+      exit 1
+    fi
+  done
 }
 
 wait_rollout() {
@@ -67,6 +126,17 @@ wait_rollout() {
   local kind="$2"
   local name="$3"
   kubectl -n "$ns" rollout status "$kind/$name" --timeout=600s
+}
+
+render_app_probes() {
+  local output
+  output=$(mktemp)
+  # Проверки endpoint'ов хранят публичный профиль pkhco.ru, а при deploy подставляется текущий APP_DOMAIN.
+  sed \
+    -e "s|app\\.pkhco.ru|app.${APP_DOMAIN}|g" \
+    -e "s|gateway\\.pkhco.ru|gateway.${APP_DOMAIN}|g" \
+    kubernetes/observability/probes/app-probes.yaml > "$output"
+  echo "$output"
 }
 
 POSTGRES_ENV_FILE=kubernetes/apps/postgres/values-dev.yaml
@@ -79,8 +149,14 @@ if [[ "$ENV_NAME" == *stage* ]]; then
 fi
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+validate_tls_issuer
+require_prod_cluster_issuer
 create_registry_secret_if_possible
 create_postgres_secret
+check_app_images_if_possible
+delete_tls_artifact_if_not_prod "$NAMESPACE" api-tls api-tls
+delete_tls_artifact_if_not_prod "$NAMESPACE" gateway-tls gateway-tls
+delete_tls_artifact_if_not_prod "$NAMESPACE" frontend-tls frontend-tls
 
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
 helm repo update bitnami
@@ -90,6 +166,7 @@ helm upgrade --install postgres bitnami/postgresql \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --wait \
+  --hide-notes \
   --timeout 15m \
   -f kubernetes/apps/postgres/values.yaml \
   -f "$POSTGRES_ENV_FILE"
@@ -98,6 +175,7 @@ helm upgrade --install redis bitnami/redis \
   --version "$REDIS_CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 15m \
   -f kubernetes/apps/redis/values.yaml \
   -f "$REDIS_ENV_FILE"
@@ -105,23 +183,38 @@ helm upgrade --install redis bitnami/redis \
 helm upgrade --install api kubernetes/apps/api \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/api/values.yaml \
-  -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/api/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/api" \
+  --set-string "image.tag=${IMAGE_TAG}" \
+  --set-string "ingress.host=api.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 helm upgrade --install gateway kubernetes/apps/gateway \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/gateway/values.yaml \
-  -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/gateway/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/gateway" \
+  --set-string "image.tag=${IMAGE_TAG}" \
+  --set-string "ingress.host=gateway.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 helm upgrade --install frontend kubernetes/apps/frontend \
   --namespace "$NAMESPACE" \
   --wait \
+  --hide-notes \
   --timeout 10m \
   -f kubernetes/apps/frontend/values.yaml \
-  -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml"
+  -f "kubernetes/apps/frontend/values-${APP_ENV_FILE_SUFFIX}.yaml" \
+  --set-string "image.repository=${IMAGE_REGISTRY}/platform/frontend" \
+  --set-string "image.tag=${IMAGE_TAG}" \
+  --set-string "ingress.host=app.${APP_DOMAIN}" \
+  --set-string "ingress.clusterIssuer=${TLS_CLUSTER_ISSUER}"
 
 kubectl apply -f kubernetes/security/rbac/
 kubectl apply -f kubernetes/security/network-policies/
@@ -132,5 +225,14 @@ wait_rollout "$NAMESPACE" statefulset redis-master
 wait_rollout "$NAMESPACE" deployment api
 wait_rollout "$NAMESPACE" deployment gateway
 wait_rollout "$NAMESPACE" deployment frontend
+wait_certificate_ready "$NAMESPACE" gateway-tls 1200s
+wait_certificate_ready "$NAMESPACE" frontend-tls 1200s
+if kubectl -n "$NAMESPACE" get certificate api-tls >/dev/null 2>&1; then
+  wait_certificate_ready "$NAMESPACE" api-tls 1200s
+fi
+
+APP_PROBES_FILE=$(render_app_probes)
+trap 'rm -f "$APP_PROBES_FILE"' EXIT
+kubectl apply -f "$APP_PROBES_FILE"
 
 kubectl -n "$NAMESPACE" get pods,svc,ingress

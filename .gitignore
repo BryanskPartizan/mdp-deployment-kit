@@ -19,6 +19,7 @@ override.tf.json
 
 # Артефакты deployment-kit создаются локально во время bootstrap/deploy/test.
 deployment-kit/.artifacts/
+deployment-kit/.ansible/
 deployment-kit/.kube/
 deployment-kit/*.tar.gz
 deployment-kit/ansible/inventory/generated/*.yml
@@ -27,6 +28,8 @@ deployment-kit/ansible/inventory/generated/*.yaml
 # Логи, временные файлы и Python cache.
 *.log
 *.retry
+deployment-kit/.secrets/final_log
+.secrets/final_log
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -38,8 +41,9 @@ __pycache__/
 *.secret
 *.secrets
 secrets/
+.secrets/
+*.key.json
 local.env
 .env
 .env.*
 !.env.example
-

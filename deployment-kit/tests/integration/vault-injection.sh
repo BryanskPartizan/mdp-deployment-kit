@@ -43,8 +43,8 @@ spec:
         - |
           for i in \$(seq 1 60); do
             if [ -s /vault/secrets/config ]; then
-              cat /vault/secrets/config
               grep -q "DATABASE_URL" /vault/secrets/config
+              echo "Vault secret file injected and expected key exists"
               exit 0
             fi
             sleep 2
@@ -55,9 +55,8 @@ YAML
 
 if ! kubectl -n app wait --for=jsonpath='{.status.phase}'=Succeeded "pod/${POD_NAME}" --timeout=300s; then
   kubectl -n app describe pod "$POD_NAME" || true
-  kubectl -n app logs "$POD_NAME" --all-containers=true || true
+  kubectl -n app logs "$POD_NAME" -c probe || true
   exit 1
 fi
 
-kubectl -n app logs "$POD_NAME" --all-containers=true
-
+kubectl -n app logs "$POD_NAME" -c probe

@@ -3,7 +3,7 @@
   apt:
     update_cache: true
     cache_valid_time: 3600
-  when: ansible_os_family == "Debian"
+  when: ansible_facts["os_family"] == "Debian"
 
 - name: Установка базовых пакетов
   package:
@@ -17,7 +17,7 @@
 
 - name: Немедленное отключение swap
   command: swapoff -a
-  when: ansible_swaptotal_mb | int > 0
+  when: ansible_facts["swaptotal_mb"] | int > 0
 
 - name: Отключение swap в fstab
   replace:

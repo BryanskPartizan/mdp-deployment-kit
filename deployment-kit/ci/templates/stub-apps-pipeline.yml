@@ -1,0 +1,91 @@
+# Файл описывает CI/CD-конвейер демонстрационных приложений из каталога apps/.
+
+variables:
+  ENV: "vm-dev"
+  APP_DOMAIN: "pkhco.ru"
+  APP_NAMESPACE: "app"
+  IMAGE_REGISTRY: "registry.pkhco.ru"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  TLS_CLUSTER_ISSUER: "letsencrypt-prod"
+  IMAGE_PLATFORM: "linux/amd64"
+  KANIKO_IMAGE: "gcr.io/kaniko-project/executor:v1.24.0-debug"
+  TRIVY_IMAGE: "aquasec/trivy:0.58.2"
+  HELM_KUBECTL_IMAGE: "dtzar/helm-kubectl:3.16.3"
+
+validate_stub_apps:
+  stage: validate
+  image: node:24-alpine
+  script:
+    - node --check apps/api/server.js
+    - node --check apps/gateway/server.js
+    - node --check apps/frontend/server.js
+    - node --check apps/lib/config.js
+    - node --check apps/lib/http.js
+    - node --check apps/lib/redis.js
+
+build_stub_images:
+  stage: build
+  image:
+    name: "$KANIKO_IMAGE"
+    entrypoint: [""]
+  parallel:
+    matrix:
+      - APP_NAME: ["api", "gateway", "frontend"]
+  script:
+    - test -n "$REGISTRY_USER"
+    - test -n "$REGISTRY_PASSWORD"
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$IMAGE_REGISTRY\":{\"username\":\"$REGISTRY_USER\",\"password\":\"$REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --custom-platform "$IMAGE_PLATFORM" --context "$CI_PROJECT_DIR/apps" --dockerfile "$CI_PROJECT_DIR/apps/$APP_NAME/Dockerfile" --destination "$IMAGE_REGISTRY/platform/$APP_NAME:$IMAGE_TAG" --destination "$IMAGE_REGISTRY/platform/$APP_NAME:$CI_COMMIT_REF_SLUG" --destination "$IMAGE_REGISTRY/platform/$APP_NAME:latest"
+
+scan_stub_images:
+  stage: scan
+  image:
+    name: "$TRIVY_IMAGE"
+    entrypoint: [""]
+  needs:
+    - job: build_stub_images
+  parallel:
+    matrix:
+      - APP_NAME: ["api", "gateway", "frontend"]
+  variables:
+    TRIVY_USERNAME: "$REGISTRY_USER"
+    TRIVY_PASSWORD: "$REGISTRY_PASSWORD"
+  script:
+    - trivy image --format cyclonedx --output "sbom-$APP_NAME.cdx.json" "$IMAGE_REGISTRY/platform/$APP_NAME:$IMAGE_TAG"
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$IMAGE_REGISTRY/platform/$APP_NAME:$IMAGE_TAG"
+  artifacts:
+    access: developer
+    paths:
+      - sbom-*.cdx.json
+    expire_in: 1 week
+
+deploy_stub_apps:
+  stage: apps
+  image: "$HELM_KUBECTL_IMAGE"
+  needs:
+    - job: scan_stub_images
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - chmod +x ci/scripts/deploy-app-charts.sh
+    - APP_IMAGE_TAG="$IMAGE_TAG" ci/scripts/deploy-app-charts.sh "$ENV"
+
+smoke_stub_apps:
+  stage: smoke
+  image: curlimages/curl:8.11.1
+  needs:
+    - job: deploy_stub_apps
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - curl -fsS "https://gateway.$APP_DOMAIN/health"
+    - curl -fsS "https://app.$APP_DOMAIN/health"
+  after_script:
+    - |
+      status="ok"
+      if [ "$CI_JOB_STATUS" != "success" ]; then status="fail"; fi
+      curl -kfsS \
+        -H 'content-type: application/json' \
+        --data "{\"id\":\"gitlab-${CI_PIPELINE_ID}-${CI_JOB_NAME}\",\"suite\":\"gitlab-ci\",\"title\":\"GitLab CI smoke\",\"status\":\"${status}\",\"durationSeconds\":0,\"summary\":\"${CI_JOB_STATUS}\",\"checks\":[{\"status\":\"${status}\",\"title\":\"gateway/app health\",\"durationSeconds\":0}]}" \
+        "https://gateway.${APP_DOMAIN}/test-runs" || true

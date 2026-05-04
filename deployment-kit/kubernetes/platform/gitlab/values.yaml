@@ -2,21 +2,21 @@
 global:
   edition: ce
   hosts:
-    domain: lab.local
+    domain: pkhco.ru
     https: true
     externalIP: "127.0.0.1"
     gitlab:
-      name: gitlab.lab.local
+      name: gitlab.pkhco.ru
     registry:
-      name: registry.lab.local
+      name: registry.pkhco.ru
     minio:
-      name: minio.lab.local
+      name: minio.pkhco.ru
   ingress:
     enabled: true
     class: nginx
     configureCertmanager: false
     annotations:
-      cert-manager.io/cluster-issuer: test-selfsigned
+      cert-manager.io/cluster-issuer: letsencrypt-prod
     tls:
       enabled: true
   initialRootPassword:
@@ -29,6 +29,10 @@ global:
       issues: true
       mergeRequests: true
       wiki: true
+    initialDefaults:
+      # Для self-hosted стенда регистрация пользователей должна включаться осознанно администратором.
+      signupEnabled: false
+      gitlabProductUsageData: false
 
 # Внешние ingress-nginx и cert-manager уже устанавливаются deployment-kit.
 installCertmanager: false
@@ -41,15 +45,63 @@ prometheus:
 
 gitlab-runner:
   install: true
+  # Runner регистрируется через внутренний Service GitLab, чтобы не зависеть от внешнего DNS внутри кластера.
+  gitlabUrl: http://gitlab-webservice-default.devops.svc.cluster.local:8080
   rbac:
     create: true
+    clusterWideAccess: false
+    rules:
+      # Runner получает права только в namespace ci, где создаются job pods.
+      - apiGroups: [""]
+        resources: ["pods", "pods/attach", "pods/exec", "pods/log"]
+        verbs: ["get", "list", "watch", "create", "delete", "patch"]
+      - apiGroups: [""]
+        resources: ["secrets", "configmaps"]
+        verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["services"]
+        verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["list", "watch"]
+  serviceAccount:
+    create: true
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  podSecurityContext:
+    runAsUser: 100
+    fsGroup: 65533
   runners:
-    locked: false
+    jobNamespace: ci
+    locked: true
+    tags: "deployment-kit,kubernetes"
     config: |
       [[runners]]
+        clone_url = "http://gitlab-webservice-default.devops.svc.cluster.local:8080"
+        executor = "kubernetes"
+        # Значение согласовано с concurrent=2, чтобы runner не упирался в один long-polling запрос.
+        request_concurrency = 2
         [runners.kubernetes]
           image = "ubuntu:22.04"
-          namespace = "devops"
+          namespace = "ci"
+          privileged = false
+          allow_privilege_escalation = false
+          pull_policy = "if-not-present"
+          poll_timeout = 180
+          cpu_request = "100m"
+          memory_request = "256Mi"
+          cpu_limit = "1"
+          memory_limit = "1Gi"
+          helper_cpu_request = "50m"
+          helper_memory_request = "128Mi"
+          helper_cpu_limit = "500m"
+          helper_memory_limit = "512Mi"
   concurrent: 2
 
 registry:

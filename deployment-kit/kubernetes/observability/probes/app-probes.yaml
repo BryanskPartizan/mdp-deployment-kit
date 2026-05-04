@@ -1,0 +1,190 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: deployment-kit-app-probes
+  namespace: observability
+  labels:
+    deployment-kit/component: endpoint-probe
+    deployment-kit/scope: applications
+spec:
+  jobLabel: blackbox-exporter
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-blackbox-exporter
+      app.kubernetes.io/instance: blackbox-exporter
+  namespaceSelector:
+    matchNames:
+      - observability
+  endpoints:
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx
+        target:
+          - http://api.app.svc.cluster.local:8081/health
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: app-api-internal
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: api
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: app-api-internal
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx
+        target:
+          - http://gateway.app.svc.cluster.local:8080/health
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: app-gateway-internal
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: gateway
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: app-gateway-internal
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx
+        target:
+          - http://frontend.app.svc.cluster.local:8080/health
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: app-frontend-internal
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: frontend
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: app-frontend-internal
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx_insecure
+        target:
+          - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health
+        hostname:
+          - app.pkhco.ru
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: ingress-frontend
+          action: replace
+        - targetLabel: surface
+          replacement: ingress
+          action: replace
+        - targetLabel: component
+          replacement: frontend
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: ingress-frontend
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - http_2xx_insecure
+        target:
+          - https://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health
+        hostname:
+          - gateway.pkhco.ru
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: ingress-gateway
+          action: replace
+        - targetLabel: surface
+          replacement: ingress
+          action: replace
+        - targetLabel: component
+          replacement: gateway
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: ingress-gateway
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - tcp_connect
+        target:
+          - postgres-postgresql.app.svc.cluster.local:5432
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: postgres-tcp
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: postgres
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: postgres-tcp
+          action: replace
+    - port: http
+      scheme: http
+      path: /probe
+      interval: 30s
+      scrapeTimeout: 10s
+      params:
+        module:
+          - tcp_connect
+        target:
+          - redis-master.app.svc.cluster.local:6379
+      metricRelabelings:
+        - targetLabel: endpoint
+          replacement: redis-tcp
+          action: replace
+        - targetLabel: surface
+          replacement: internal
+          action: replace
+        - targetLabel: component
+          replacement: redis
+          action: replace
+        - sourceLabels: [target]
+          targetLabel: target
+          replacement: redis-tcp
+          action: replace
