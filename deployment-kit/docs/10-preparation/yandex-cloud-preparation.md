@@ -632,16 +632,6 @@ export YC_TOKEN="$(
 export TF_VAR_yc_token="$YC_TOKEN"
 ```
 
-### Ansible не может подключиться по SSH
-
-Проверьте:
-
-- `ssh_public_key_path` указывает на публичный ключ;
-- приватный ключ есть у оператора;
-- `allowed_ssh_cidrs` содержит текущий внешний IP;
-- VM получили public NAT, если подключение идёт напрямую;
-- пользователь `ssh_user` совпадает с metadata VM, по умолчанию `ubuntu`.
-
 ## 15. Официальные ссылки
 
 - Yandex Cloud CLI install: https://yandex.cloud/en/docs/cli/operations/install-cli

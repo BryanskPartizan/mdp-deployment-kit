@@ -101,22 +101,6 @@ terraform -chdir=terraform/edge validate
 - app deployer вынесен в отдельный ServiceAccount `app-deployer`;
 - observability namespace имеет только необходимые разрешения для probes.
 
-Остаточные ограничения:
-- egress security group по умолчанию открыт на `0.0.0.0/0`, потому что узлы должны скачивать пакеты и образы без отдельного NAT/proxy слоя, но теперь диапазон вынесен в `allowed_egress_cidrs`;
-- namespace `devops` не закрыт default-deny NetworkPolicy из-за сложности внутренних потоков GitLab chart;
-- для production нужно добавить egress proxy/NAT policy и отдельный набор NetworkPolicy для GitLab.
-
-## Известные production gaps
-
-Перед настоящей production эксплуатацией нужно:
-- включить TLS на Vault listener и настроить сертификаты;
-- убрать `--kubelet-insecure-tls` у metrics-server после настройки kubelet serving certificates;
-- перевести GitLab PostgreSQL/Redis/Object Storage на managed/external сервисы;
-- добавить GitLab backup/restore;
-- расширить supply-chain проверки образов: подписи образов; SBOM и базовый Trivy scan добавлены в app pipeline template;
-- подготовить реальные demo/app images и проверить registry push/pull;
-- повторять полный live-прогон в Yandex Cloud перед значимыми изменениями инфраструктурных сценариев.
-
 ## Контрольный live-прогон
 
 Для подтверждения готовности стенда выполняется полный live-прогон:

@@ -28,8 +28,8 @@ deployment-kit/ansible/inventory/generated/*.yaml
 # Логи, временные файлы и Python cache.
 *.log
 *.retry
-final_log
-deployment-kit/final_log
+deployment-kit/.secrets/final_log
+.secrets/final_log
 __pycache__/
 *.py[cod]
 .pytest_cache/

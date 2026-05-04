@@ -25,32 +25,33 @@
 
 ```mermaid
 flowchart TB
-    CF[Cloudflare DNS only] --> YNLB[Yandex NLB<br/>51.250.72.199]
-    YNLB --> INGRESS[ingress-nginx]
-    INGRESS --> GITLAB[GitLab]
-    INGRESS --> GRAFANA[Grafana]
-    INGRESS --> HEADLAMP[Headlamp]
-    INGRESS --> VAULT[Vault]
-    INGRESS --> FRONT[Frontend]
-    FRONT --> GATEWAY[Gateway]
+    USER[Пользователь / инженер] --> CF[Cloudflare DNS only]
+    CF --> INGRESS_LB[Yandex NLB: Ingress 80/443]
+    USER --> API_LB[Yandex NLB: Kubernetes API 6443]
+
+    API_LB --> CP[Kubernetes control plane x3]
+    INGRESS_LB --> NGINX[ingress-nginx]
+
+    CP --> WORKERS[Worker nodes x2]
+    NGINX --> GITLAB[GitLab]
+    NGINX --> REGISTRY[GitLab Registry]
+    NGINX --> GRAFANA[Grafana]
+    NGINX --> HEADLAMP[Headlamp]
+    NGINX --> VAULT[Vault]
+    NGINX --> FRONTEND[Frontend]
+    NGINX --> GATEWAY[Gateway]
+
+    FRONTEND --> GATEWAY
     GATEWAY --> API[API]
-    API --> PG[PostgreSQL]
-    API --> REDIS[Redis]
+    API --> POSTGRES[(PostgreSQL)]
+    API --> REDIS[(Redis)]
     API --> VAULT
+
     PROM[Prometheus] --> API
-    PROM --> PG
+    PROM --> POSTGRES
     PROM --> REDIS
-    LOKI[Loki] <-- ALLOY[Alloy]
+    ALLOY[Alloy] --> LOKI[Loki]
 ```
-
-## Зафиксированные ограничения
-
-1. GitLab Helm chart в dev-режиме использует bundled PostgreSQL, Redis, Gitaly и MinIO. Для
-   production-класса требуется отдельная архитектура хранения и баз данных.
-2. `local-path` storage class подходит для учебного и dev-стенда. Для production-сценария нужен
-   сетевой отказоустойчивый storage.
-3. Доступы и bootstrap-секреты должны храниться вне репозитория. В отчет перенесены только
-   обезличенные или не секретные фрагменты вывода.
 
 ## Вывод
 
